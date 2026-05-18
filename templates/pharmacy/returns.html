@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Returns | Ashafa Pharmacy ERP{% endblock %}
+{% block content %}
+<div class="page-title">
+  <div>
+    <span class="eyebrow">Returns</span>
+    <h1>Return entry</h1>
+    <p>Find the original invoice, choose items, and restock returned quantities.</p>
+  </div>
+</div>
+<form method="get" class="card soft-card mb-4">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-4">{{ form.invoice_number.label_tag }}{{ form.invoice_number }}</div>
+      <div class="col-md-4">{{ form.invoice_date.label_tag }}{{ form.invoice_date }}</div>
+      <div class="col-md-4">{{ form.phone.label_tag }}{{ form.phone }}</div>
+      <div class="col-12"><button class="btn btn-outline-primary">Find invoice</button></div>
+    </div>
+  </div>
+</form>
+
+{% if invoice %}
+  <form method="post" class="card table-card">
+    {% csrf_token %}
+    <input type="hidden" name="invoice_id" value="{{ invoice.id }}">
+    <div class="card-header bg-white d-flex justify-content-between">
+      <strong>{{ invoice.invoice_number }} - {{ invoice.customer_name }}</strong>
+      <span>Total {{ invoice.grand_total }}</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle mb-0">
+        <thead><tr><th>Product</th><th>Batch</th><th>Sold</th><th>Returned</th><th>Return now</th></tr></thead>
+        <tbody>
+          {% for item in invoice.items.all %}
+            <tr>
+              <td>{{ item.product_name }}</td>
+              <td>{{ item.batch_number }}</td>
+              <td>{{ item.quantity }}</td>
+              <td>{{ item.returned_quantity }}</td>
+              <td><input type="number" name="{{ item.id }}" min="0" max="{{ item.returnable_quantity }}" value="0" class="form-control form-control-sm"></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Refund method</label>
+          <select class="form-select" name="refund_method">
+            <option value="adjust_due">Adjust due</option>
+            <option value="cash">Cash refund</option>
+          </select>
+        </div>
+        <div class="col-md-8">
+          <label class="form-label">Notes</label>
+          <input class="form-control" name="notes" placeholder="Reason or memo">
+        </div>
+      </div>
+      <button class="btn btn-primary mt-3">Process return</button>
+    </div>
+  </form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,40 @@
+<div class="modal fade" id="quickProductModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content soft-modal">
+      <div class="modal-header border-0">
+        <div>
+          <h5 class="modal-title" id="quickProductName">Add medicine</h5>
+          <p class="text-muted mb-0 small" id="quickProductMeta"></p>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex gap-3 align-items-start">
+          <div class="medicine-preview" id="quickProductImage"><i class="bi bi-capsule-pill"></i></div>
+          <div class="flex-grow-1">
+            <input type="hidden" id="quickBatchId">
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">Quantity</label>
+                <input type="number" class="form-control" id="quickQuantity" min="1" value="1">
+              </div>
+              <div class="col-6">
+                <label class="form-label">TP price</label>
+                <input type="number" class="form-control" id="quickUnitPrice" step="0.01" min="0">
+              </div>
+              <div class="col-12">
+                <label class="form-label">Discount</label>
+                <input type="number" class="form-control" id="quickDiscount" step="0.01" min="0" value="0">
+              </div>
+            </div>
+            <div class="small text-muted mt-3" id="quickStockInfo"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="quickSaveProduct">Save to cart</button>
+      </div>
+    </div>
+  </div>
+</div>

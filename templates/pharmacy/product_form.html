@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} | Ashafa Pharmacy ERP{% endblock %}
+{% block content %}
+<div class="page-title">
+  <div>
+    <span class="eyebrow">Inventory</span>
+    <h1>{{ title }}</h1>
+    <p>Create a medicine profile before adding stock batches.</p>
+  </div>
+</div>
+<form method="post" enctype="multipart/form-data" class="card soft-card">
+  {% csrf_token %}
+  <div class="card-body">
+    {% include "shared/form_errors.html" with form=form %}
+    <div class="row g-3">
+      {% for field in form %}
+        <div class="{% if field.name == 'description' %}col-12{% else %}col-md-6{% endif %}">
+          {% if field.field.widget.input_type == 'checkbox' %}
+            <label class="form-check mt-4">{{ field }} <span class="form-check-label">{{ field.label }}</span></label>
+          {% else %}
+            {{ field.label_tag }}{{ field }}
+          {% endif %}
+          {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+    <div class="mt-4 d-flex gap-2">
+      <button class="btn btn-primary">Save product</button>
+      <a href="{% url 'products' %}" class="btn btn-light">Cancel</a>
+    </div>
+  </div>
+</form>
+{% endblock %}

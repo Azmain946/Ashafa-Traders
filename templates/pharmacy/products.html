@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Products | Ashafa Pharmacy ERP{% endblock %}
+{% block content %}
+<div class="page-title">
+  <div>
+    <span class="eyebrow">Inventory</span>
+    <h1>Products and stock</h1>
+    <p>Maintain medicine details, images, batches, prices, and movement history.</p>
+  </div>
+  <a href="{% url 'product_create' %}" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Add product</a>
+</div>
+
+<form class="filter-bar" method="get">
+  <input class="form-control" name="q" value="{{ query }}" placeholder="Search name, generic, barcode or batch">
+  <button class="btn btn-outline-primary">Search</button>
+</form>
+
+<div class="card table-card">
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead><tr><th>Product</th><th>Generic</th><th>Category</th><th>Brand</th><th>Stock</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for product in page_obj %}
+          <tr>
+            <td>
+              <div class="table-product">
+                <div class="mini-image">
+                  {% if product.thumbnail %}<img src="{{ product.thumbnail.url }}" alt="{{ product.display_name }}">{% else %}<i class="bi bi-capsule"></i>{% endif %}
+                </div>
+                <div><strong>{{ product.display_name }}</strong><small>{{ product.barcode|default:"No barcode" }}</small></div>
+              </div>
+            </td>
+            <td>{{ product.generic_name|default:"-" }}</td>
+            <td>{{ product.category|default:"-" }}</td>
+            <td>{{ product.brand|default:"-" }}</td>
+            <td><span class="stock-pill">{{ product.total_stock }}</span></td>
+            <td>{% if product.is_active %}<span class="badge text-bg-success">Active</span>{% else %}<span class="badge text-bg-secondary">Inactive</span>{% endif %}</td>
+            <td class="text-end"><a class="btn btn-sm btn-light" href="{% url 'product_detail' product.pk %}">Details</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="text-center text-muted py-4">No products found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "shared/pagination.html" %}
+{% endblock %}

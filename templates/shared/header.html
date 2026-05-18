@@ -1,0 +1,33 @@
+<header class="topbar">
+  <button class="btn btn-light d-lg-none" type="button" data-sidebar-toggle aria-label="Toggle navigation">
+    <i class="bi bi-list"></i>
+  </button>
+  <div class="top-search">
+    <i class="bi bi-search"></i>
+    <input type="search" class="form-control" id="globalSearchInput" placeholder="Search medicines, barcode, batch or invoice...">
+    <div class="global-search-results shadow-sm" id="globalSearchResults"></div>
+  </div>
+  <div class="topbar-actions">
+    <a class="icon-btn" href="{% url 'reminders' %}" title="Reminders"><i class="bi bi-bell"></i></a>
+    <a class="btn btn-primary" href="{% url 'order' %}"><i class="bi bi-cart-plus me-1"></i> New order</a>
+    <div class="dropdown">
+      <button class="user-chip dropdown-toggle" data-bs-toggle="dropdown" type="button">
+        <span class="avatar">{{ request.user.username|slice:":1"|upper }}</span>
+        <span class="d-none d-md-inline">{{ request.user.get_short_name|default:request.user.username }}</span>
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end">
+        {% if request.user.is_staff %}
+          <li><a class="dropdown-item" href="{% url 'settings' %}">Settings</a></li>
+        {% endif %}
+        <li><a class="dropdown-item" href="{% url 'admin:index' %}">Django admin</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li>
+          <form method="post" action="{% url 'logout' %}" class="px-3 py-1">
+            {% csrf_token %}
+            <button class="btn btn-sm btn-outline-danger w-100">Sign out</button>
+          </form>
+        </li>
+      </ul>
+    </div>
+  </div>
+</header>
