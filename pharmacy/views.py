@@ -141,6 +141,7 @@ def products(request):
             | Q(generic_name__icontains=query)
             | Q(barcode__icontains=query)
             | Q(batches__batch_number__icontains=query)
+            | Q(batches__barcode__icontains=query)
         ).distinct()
     return render(
         request,
@@ -161,10 +162,35 @@ def product_create(request):
         if form.is_valid():
             product = form.save()
             messages.success(request, "Product created.")
+            if request.POST.get("print_barcode") == "1":
+                batch = form.created_batch
+                labels = request.POST.get("label_count") or batch.number_of_boxes
+                return redirect(f"{reverse('batch_barcode_print', args=[batch.pk])}?labels={labels}")
             return redirect("product_detail", pk=product.pk)
     else:
         form = ProductEntryForm()
     return render(request, "pharmacy/product_form.html", {"form": form, "title": "Add product"})
+
+
+@login_required
+def batch_barcode_print(request, pk):
+    batch = get_object_or_404(ProductBatch.objects.select_related("product"), pk=pk)
+    if not batch.barcode:
+        batch.save(update_fields=["barcode", "updated_at"])
+    try:
+        label_count = int(request.GET.get("labels", batch.number_of_boxes))
+    except (TypeError, ValueError):
+        label_count = batch.number_of_boxes
+    label_count = max(1, min(label_count, 500))
+    return render(
+        request,
+        "pharmacy/barcode_print.html",
+        {
+            "batch": batch,
+            "labels": range(label_count),
+            "label_count": label_count,
+        },
+    )
 
 
 @login_required
@@ -408,6 +434,7 @@ def api_product_search(request):
                 "generic_name": batch.product.generic_name,
                 "brand": batch.product.brand.name if batch.product.brand else "",
                 "batch_number": batch.batch_number,
+                "barcode": batch.barcode,
                 "expiry_date": batch.expiry_date.isoformat(),
                 "stock_quantity": batch.stock_quantity,
                 "tp_price": str(batch.tp_price),

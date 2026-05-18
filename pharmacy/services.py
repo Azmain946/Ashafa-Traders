@@ -458,11 +458,13 @@ def search_products(term, limit=8):
             | Q(product__generic_name__icontains=term)
             | Q(product__barcode__icontains=term)
             | Q(batch_number__icontains=term)
+            | Q(barcode__icontains=term)
         )
         .select_related("product", "product__brand")
         .only(
             "id",
             "batch_number",
+            "barcode",
             "expiry_date",
             "stock_quantity",
             "tp_price",

@@ -42,6 +42,10 @@ def generate_product_barcode():
     return f"BC{timezone.now():%y%m%d}{uuid.uuid4().hex[:8].upper()}"
 
 
+def generate_batch_barcode():
+    return f"BT{timezone.now():%y%m%d}{uuid.uuid4().hex[:8].upper()}"
+
+
 def validate_upload_size(value):
     max_mb = 8
     if value.size > max_mb * 1024 * 1024:
@@ -199,6 +203,7 @@ class Product(TimeStampedModel):
 class ProductBatch(TimeStampedModel):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="batches")
     batch_number = models.CharField(max_length=100, db_index=True)
+    barcode = models.CharField(max_length=80, unique=True, blank=True, null=True, db_index=True)
     mfg_date = models.DateField("Manufacturing date", null=True, blank=True)
     expiry_date = models.DateField(db_index=True)
     buy_price = models.DecimalField(max_digits=12, decimal_places=2)
@@ -226,6 +231,11 @@ class ProductBatch(TimeStampedModel):
 
     def __str__(self):
         return f"{self.product.display_name} - {self.batch_number}"
+
+    def save(self, *args, **kwargs):
+        if not self.barcode:
+            self.barcode = generate_batch_barcode()
+        super().save(*args, **kwargs)
 
     @property
     def is_expired(self):

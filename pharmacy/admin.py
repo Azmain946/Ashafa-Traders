@@ -30,6 +30,7 @@ class ProductBatchInline(admin.TabularInline):
     extra = 0
     fields = (
         "batch_number",
+        "barcode",
         "mfg_date",
         "expiry_date",
         "number_of_boxes",
@@ -52,9 +53,9 @@ class ProductAdmin(admin.ModelAdmin):
 
 @admin.register(ProductBatch)
 class ProductBatchAdmin(admin.ModelAdmin):
-    list_display = ("product", "batch_number", "mfg_date", "expiry_date", "tp_price", "mrp", "stock_quantity", "shelf_number")
+    list_display = ("product", "batch_number", "barcode", "mfg_date", "expiry_date", "tp_price", "mrp", "stock_quantity", "shelf_number")
     list_filter = ("expiry_date", "is_active")
-    search_fields = ("product__name", "product__generic_name", "batch_number")
+    search_fields = ("product__name", "product__generic_name", "batch_number", "barcode")
 
 
 class SalesInvoiceItemInline(admin.TabularInline):

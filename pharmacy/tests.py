@@ -105,3 +105,10 @@ class PharmacyWorkflowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         strengths = {item["strength"] for item in response.json()["variants"]}
         self.assertEqual(strengths, {"250mg", "500mg"})
+
+    def test_batch_barcode_print_page_uses_entry_barcode(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("batch_barcode_print", args=[self.batch.pk]), {"labels": 2})
+        self.assertEqual(response.status_code, 200)
+        self.batch.refresh_from_db()
+        self.assertContains(response, self.batch.barcode)

@@ -1,0 +1,32 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Print barcode | {{ batch.product.display_name }}</title>
+  <link href="{% static 'vendor/bootstrap/bootstrap.min.css' %}" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body class="barcode-print-body">
+  <div class="barcode-print-actions no-print">
+    <button class="btn btn-primary" onclick="window.print()">Print</button>
+    <a class="btn btn-light" href="{% url 'product_detail' batch.product.pk %}">Cancel</a>
+  </div>
+  <main class="barcode-label-grid">
+    {% for _ in labels %}
+      <section class="barcode-label">
+        <strong>{{ batch.product.display_name }}</strong>
+        <span>Batch: {{ batch.batch_number }}</span>
+        <div class="barcode-code">{{ batch.barcode }}</div>
+        <small>EXP {{ batch.expiry_date }} | TP {{ batch.tp_price }} | MRP {{ batch.mrp }}</small>
+      </section>
+    {% endfor %}
+  </main>
+  <script>
+    window.addEventListener("load", function () {
+      window.print();
+    });
+  </script>
+</body>
+</html>

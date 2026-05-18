@@ -19,13 +19,6 @@
         </div>
         <h2 class="h4 mt-3">{{ product.display_name }}</h2>
         <p class="text-muted">{{ product.brand|default:"No brand" }} / {{ product.category|default:"Uncategorized" }}</p>
-        <div class="barcode-card" id="barcodePrintArea">
-          <span>Barcode</span>
-          <strong>{{ product.barcode }}</strong>
-        </div>
-        <button class="btn btn-outline-primary w-100 mt-3 no-print" type="button" onclick="window.print()">
-          <i class="bi bi-upc-scan me-1"></i>Print barcode
-        </button>
         <div class="metric-strip">
           <div><strong>{{ product.total_stock }}</strong><span>Total stock</span></div>
           <div><strong>{{ product.batches.count }}</strong><span>Batches</span></div>
@@ -59,14 +52,15 @@
   <div class="col-xl-8">
     <div class="card table-card">
       <div class="card-header bg-white d-flex justify-content-between align-items-center">
-        <strong>Current stock by batch</strong>
+        <strong>Product by entry date</strong>
       </div>
       <div class="table-responsive">
         <table class="table align-middle mb-0">
-          <thead><tr><th>Batch</th><th>MFG</th><th>Expiry</th><th>Boxes</th><th>Medicine/box</th><th>Buy/box</th><th>TP/box</th><th>MRP/box</th><th>Stock</th><th>Shelf</th><th>Adjust</th></tr></thead>
+          <thead><tr><th>Entry date</th><th>Batch</th><th>MFG</th><th>Expiry</th><th>Boxes</th><th>Medicine/box</th><th>Buy/box</th><th>TP/box</th><th>MRP/box</th><th>Stock</th><th>Shelf</th><th>Barcode</th><th>Adjust</th></tr></thead>
           <tbody>
             {% for batch in batches %}
               <tr>
+                <td>{{ batch.created_at|date:"M d, Y" }}</td>
                 <td>{{ batch.batch_number }}</td>
                 <td>{{ batch.mfg_date|default:"-" }}</td>
                 <td>{{ batch.expiry_date }}</td>
@@ -78,19 +72,24 @@
                 <td><span class="stock-pill">{{ batch.stock_quantity }}</span></td>
                 <td>{{ batch.shelf_number|default:"-" }}</td>
                 <td>
+                  <button class="btn btn-sm btn-outline-primary" type="button" data-batch-barcode-url="{% url 'batch_barcode_print' batch.pk %}" data-default-labels="{{ batch.number_of_boxes }}">
+                    <i class="bi bi-upc-scan me-1"></i>Barcode
+                  </button>
+                </td>
+                <td>
                   <form method="post" class="d-flex gap-2 align-items-center stock-adjust-form">
                     {% csrf_token %}
                     <input type="hidden" name="_action" value="adjust_stock">
                     <input type="hidden" name="batch_id" value="{{ batch.id }}">
-                    {{ adjustment_form.action }}
                     <input class="form-control form-control-sm" name="quantity" type="number" min="1" placeholder="Qty" required>
                     <input class="form-control form-control-sm" name="note" placeholder="Note">
-                    <button class="btn btn-sm btn-outline-primary">Save</button>
+                    <button class="btn btn-sm btn-outline-success" name="action" value="add" title="Add stock">+</button>
+                    <button class="btn btn-sm btn-outline-danger" name="action" value="remove" title="Reduce stock">-</button>
                   </form>
                 </td>
               </tr>
             {% empty %}
-              <tr><td colspan="11" class="text-center text-muted py-4">No batches yet.</td></tr>
+              <tr><td colspan="13" class="text-center text-muted py-4">No batches yet.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -99,7 +98,7 @@
 
     <div class="card soft-card mt-4">
       <div class="card-body">
-        <h3 class="h5">Add stock batch</h3>
+        <h3 class="h5">Add entry</h3>
         <form method="post">
           {% csrf_token %}
           <input type="hidden" name="_action" value="add_batch">
@@ -114,7 +113,7 @@
               </div>
             {% endfor %}
           </div>
-          <button class="btn btn-primary mt-3">Save batch</button>
+          <button class="btn btn-primary mt-3">Save entry</button>
         </form>
       </div>
     </div>
@@ -143,4 +142,46 @@
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="batchBarcodeDialog" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content soft-modal">
+      <div class="modal-header border-0">
+        <h5 class="modal-title">Print barcode labels</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label" for="batchLabelCount">Label</label>
+        <input type="number" min="1" class="form-control" id="batchLabelCount" value="1">
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="printBatchBarcode">Print</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+  (function () {
+    let printUrl = "";
+    const modalEl = document.getElementById("batchBarcodeDialog");
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    const labelInput = document.getElementById("batchLabelCount");
+
+    document.querySelectorAll("[data-batch-barcode-url]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        printUrl = button.dataset.batchBarcodeUrl;
+        labelInput.value = button.dataset.defaultLabels || "1";
+        modal.show();
+      });
+    });
+
+    document.getElementById("printBatchBarcode").addEventListener("click", function () {
+      const labels = labelInput.value || "1";
+      window.location.href = printUrl + "?labels=" + encodeURIComponent(labels);
+    });
+  })();
+</script>
 {% endblock %}
