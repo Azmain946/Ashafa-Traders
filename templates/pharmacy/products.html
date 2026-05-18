@@ -12,16 +12,39 @@
 
 <form class="filter-bar" method="get">
   <input class="form-control" name="q" value="{{ query }}" placeholder="Search name, generic, barcode or batch">
+  {% if selected_category %}<input type="hidden" name="category" value="{{ selected_category.id }}">{% endif %}
   <button class="btn btn-outline-primary">Search</button>
 </form>
 
+{% if not selected_category and not query %}
+  <div class="category-grid">
+    {% for category in categories %}
+      <a class="category-card" href="{% url 'products' %}?category={{ category.id }}">
+        <span style="background: {{ category.color }};"><i class="bi bi-grid"></i></span>
+        <strong>{{ category.name }}</strong>
+        <small>{{ category.products.count }} medicines</small>
+      </a>
+    {% empty %}
+      <div class="empty-state">No categories yet.</div>
+    {% endfor %}
+  </div>
+{% else %}
+{% if selected_category %}
+  <div class="section-heading compact">
+    <div>
+      <h2>{{ selected_category.name }}</h2>
+      <p>Medicines in this category.</p>
+    </div>
+    <a class="btn btn-light" href="{% url 'products' %}">Back to categories</a>
+  </div>
+{% endif %}
 <div class="card table-card">
   <div class="table-responsive">
     <table class="table align-middle mb-0">
-      <thead><tr><th>Product</th><th>Generic</th><th>Category</th><th>Brand</th><th>Stock</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Product</th><th>Generic</th><th>Category</th><th>Brand</th><th>Stock</th></tr></thead>
       <tbody>
         {% for product in page_obj %}
-          <tr>
+          <tr class="clickable-row" data-href="{% url 'product_detail' product.pk %}">
             <td>
               <div class="table-product">
                 <div class="mini-image">
@@ -34,15 +57,14 @@
             <td>{{ product.category|default:"-" }}</td>
             <td>{{ product.brand|default:"-" }}</td>
             <td><span class="stock-pill">{{ product.total_stock }}</span></td>
-            <td>{% if product.is_active %}<span class="badge text-bg-success">Active</span>{% else %}<span class="badge text-bg-secondary">Inactive</span>{% endif %}</td>
-            <td class="text-end"><a class="btn btn-sm btn-light" href="{% url 'product_detail' product.pk %}">Details</a></td>
           </tr>
         {% empty %}
-          <tr><td colspan="7" class="text-center text-muted py-4">No products found.</td></tr>
+          <tr><td colspan="5" class="text-center text-muted py-4">No products found.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
 {% include "shared/pagination.html" %}
+{% endif %}
 {% endblock %}

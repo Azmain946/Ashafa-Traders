@@ -7,7 +7,7 @@
     <h1>Order checkout</h1>
     <p>Search medicines, choose a batch, and finalize a printable invoice.</p>
   </div>
-  <span class="order-id">Order ID: auto on confirm</span>
+  <span class="order-id">Order ID: {{ order_number }}</span>
 </div>
 
 <div class="row g-4">
@@ -30,7 +30,7 @@
       </div>
       <div class="table-responsive">
         <table class="table align-middle mb-0">
-          <thead><tr><th>Medicine</th><th>Batch</th><th>Qty</th><th>Price</th><th>Discount</th><th>Subtotal</th><th></th></tr></thead>
+          <thead><tr><th>Medicine</th><th>Batch</th><th>Qty</th><th>Price</th><th>Subtotal</th><th></th></tr></thead>
           <tbody id="cartTableBody">
             {% for item in cart.items %}
               <tr data-batch-id="{{ item.batch.id }}">
@@ -38,12 +38,11 @@
                 <td>{{ item.batch.batch_number }}</td>
                 <td>{{ item.quantity }}</td>
                 <td>{{ item.unit_price }}</td>
-                <td>{{ item.discount_amount }}</td>
                 <td>{{ item.line_total }}</td>
                 <td><button class="btn btn-sm btn-outline-danger" data-remove-cart="{{ item.batch.id }}"><i class="bi bi-trash"></i></button></td>
               </tr>
             {% empty %}
-              <tr class="empty-cart"><td colspan="7" class="text-center text-muted py-4">Search and add a medicine to begin.</td></tr>
+              <tr class="empty-cart"><td colspan="6" class="text-center text-muted py-4">Search and add a medicine to begin.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -84,4 +83,13 @@
     </form>
   </div>
 </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+  window.addEventListener("pageshow", function (event) {
+    if (event.persisted) {
+      window.location.reload();
+    }
+  });
+</script>
 {% endblock %}

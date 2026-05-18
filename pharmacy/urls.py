@@ -21,6 +21,7 @@ urlpatterns = [
     path("reminders/", views.reminders, name="reminders"),
     path("settings/", views.settings_page, name="settings"),
     path("api/search/products/", views.api_product_search, name="api_product_search"),
+    path("api/products/<int:pk>/variants/", views.api_product_variants, name="api_product_variants"),
     path("api/cart/add/", views.api_cart_add, name="api_cart_add"),
     path("api/cart/remove/", views.api_cart_remove, name="api_cart_remove"),
     path("api/dashboard/", views.api_dashboard, name="api_dashboard"),

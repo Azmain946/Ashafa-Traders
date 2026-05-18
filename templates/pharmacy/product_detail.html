@@ -19,9 +19,16 @@
         </div>
         <h2 class="h4 mt-3">{{ product.display_name }}</h2>
         <p class="text-muted">{{ product.brand|default:"No brand" }} / {{ product.category|default:"Uncategorized" }}</p>
+        <div class="barcode-card" id="barcodePrintArea">
+          <span>Barcode</span>
+          <strong>{{ product.barcode }}</strong>
+        </div>
+        <button class="btn btn-outline-primary w-100 mt-3 no-print" type="button" onclick="window.print()">
+          <i class="bi bi-upc-scan me-1"></i>Print barcode
+        </button>
         <div class="metric-strip">
           <div><strong>{{ product.total_stock }}</strong><span>Total stock</span></div>
-          <div><strong>{{ product.reorder_level }}</strong><span>Reorder level</span></div>
+          <div><strong>{{ product.batches.count }}</strong><span>Batches</span></div>
         </div>
       </div>
     </div>
@@ -56,15 +63,18 @@
       </div>
       <div class="table-responsive">
         <table class="table align-middle mb-0">
-          <thead><tr><th>Batch</th><th>Expiry</th><th>Buy</th><th>TP</th><th>MRP</th><th>Stock</th><th>Shelf</th><th>Adjust</th></tr></thead>
+          <thead><tr><th>Batch</th><th>MFG</th><th>Expiry</th><th>Boxes</th><th>Medicine/box</th><th>Buy/box</th><th>TP/box</th><th>MRP/box</th><th>Stock</th><th>Shelf</th><th>Adjust</th></tr></thead>
           <tbody>
             {% for batch in batches %}
               <tr>
                 <td>{{ batch.batch_number }}</td>
+                <td>{{ batch.mfg_date|default:"-" }}</td>
                 <td>{{ batch.expiry_date }}</td>
-                <td>{{ batch.buy_price }}</td>
-                <td>{{ batch.tp_price }}</td>
-                <td>{{ batch.mrp }}</td>
+                <td>{{ batch.number_of_boxes }}</td>
+                <td>{{ batch.units_per_box }}</td>
+                <td>{{ batch.buy_price_per_box }}</td>
+                <td>{{ batch.tp_price_per_box }}</td>
+                <td>{{ batch.mrp_per_box }}</td>
                 <td><span class="stock-pill">{{ batch.stock_quantity }}</span></td>
                 <td>{{ batch.shelf_number|default:"-" }}</td>
                 <td>
@@ -80,7 +90,7 @@
                 </td>
               </tr>
             {% empty %}
-              <tr><td colspan="8" class="text-center text-muted py-4">No batches yet.</td></tr>
+              <tr><td colspan="11" class="text-center text-muted py-4">No batches yet.</td></tr>
             {% endfor %}
           </tbody>
         </table>

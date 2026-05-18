@@ -38,6 +38,10 @@ def avatar_path(instance, filename):
     return uuid_media_path("avatars", "avatar", filename)
 
 
+def generate_product_barcode():
+    return f"BC{timezone.now():%y%m%d}{uuid.uuid4().hex[:8].upper()}"
+
+
 def validate_upload_size(value):
     max_mb = 8
     if value.size > max_mb * 1024 * 1024:
@@ -153,6 +157,8 @@ class Product(TimeStampedModel):
         )
 
     def save(self, *args, **kwargs):
+        if not self.barcode:
+            self.barcode = generate_product_barcode()
         super().save(*args, **kwargs)
         if self.image and not self.image.name.lower().endswith(".webp"):
             image_file = self.image
@@ -193,10 +199,16 @@ class Product(TimeStampedModel):
 class ProductBatch(TimeStampedModel):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="batches")
     batch_number = models.CharField(max_length=100, db_index=True)
+    mfg_date = models.DateField("Manufacturing date", null=True, blank=True)
     expiry_date = models.DateField(db_index=True)
     buy_price = models.DecimalField(max_digits=12, decimal_places=2)
     tp_price = models.DecimalField("TP price", max_digits=12, decimal_places=2)
     mrp = models.DecimalField("MRP", max_digits=12, decimal_places=2)
+    buy_price_per_box = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    tp_price_per_box = models.DecimalField("TP price per box", max_digits=12, decimal_places=2, default=0)
+    mrp_per_box = models.DecimalField("MRP per box", max_digits=12, decimal_places=2, default=0)
+    number_of_boxes = models.PositiveIntegerField(default=1)
+    units_per_box = models.PositiveIntegerField(default=1)
     stock_quantity = models.PositiveIntegerField(default=0)
     shelf_number = models.CharField(max_length=80, blank=True)
     is_active = models.BooleanField(default=True)
@@ -226,7 +238,9 @@ class ProductBatch(TimeStampedModel):
     def clean(self):
         if self.expiry_date and self.expiry_date <= timezone.localdate():
             raise ValidationError({"expiry_date": "Batch expiry date must be in the future."})
-        for field in ("buy_price", "tp_price", "mrp"):
+        if self.mfg_date and self.expiry_date and self.mfg_date >= self.expiry_date:
+            raise ValidationError({"mfg_date": "Manufacturing date must be before expiry date."})
+        for field in ("buy_price", "tp_price", "mrp", "buy_price_per_box", "tp_price_per_box", "mrp_per_box"):
             value = getattr(self, field)
             if value is not None and value < Decimal("0"):
                 raise ValidationError({field: "Price cannot be negative."})

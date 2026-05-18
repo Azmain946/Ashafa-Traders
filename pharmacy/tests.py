@@ -38,6 +38,7 @@ class PharmacyWorkflowTests(TestCase):
 
     def test_checkout_creates_invoice_and_decrements_stock(self):
         session = SessionLike()
+        session["pending_invoice_number"] = "INV-20990101-0001"
         add_or_update_cart_item(session, self.batch.id, quantity=2)
 
         invoice = finalize_checkout(
@@ -56,6 +57,9 @@ class PharmacyWorkflowTests(TestCase):
         self.batch.refresh_from_db()
         self.assertEqual(self.batch.stock_quantity, 8)
         self.assertEqual(invoice.items.count(), 1)
+        self.assertEqual(invoice.invoice_number, "INV-20990101-0001")
+        self.assertEqual(session.get("cart"), {})
+        self.assertNotIn("pending_invoice_number", session)
         self.assertEqual(invoice.payment_status, SalesInvoice.PAYMENT_PARTIAL)
         self.assertEqual(StockMovement.objects.filter(sales_invoice=invoice).count(), 1)
         self.assertEqual(invoice.antibiotic_entries.count(), 1)
@@ -84,3 +88,20 @@ class PharmacyWorkflowTests(TestCase):
         response = self.client.get(reverse("api_product_search"), {"q": "amo"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["results"][0]["batch_number"], "A-001")
+
+    def test_product_variant_api_groups_strength_batches(self):
+        second_product = Product.objects.create(name="Amoxicillin", generic_name="Amoxicillin", strength="250mg")
+        ProductBatch.objects.create(
+            product=second_product,
+            batch_number="A-002",
+            expiry_date=timezone.localdate() + timedelta(days=180),
+            buy_price=Decimal("6.00"),
+            tp_price=Decimal("8.00"),
+            mrp=Decimal("10.00"),
+            stock_quantity=5,
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("api_product_variants", args=[self.product.pk]))
+        self.assertEqual(response.status_code, 200)
+        strengths = {item["strength"] for item in response.json()["variants"]}
+        self.assertEqual(strengths, {"250mg", "500mg"})

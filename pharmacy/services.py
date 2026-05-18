@@ -44,6 +44,16 @@ def generate_invoice_number():
         return f"INV-{today:%Y%m%d}-{sequence.last_number:04d}"
 
 
+def reserve_order_number(session):
+    pending = session.get("pending_invoice_number")
+    if pending and not SalesInvoice.objects.filter(invoice_number=pending).exists():
+        return pending
+    pending = generate_invoice_number()
+    session["pending_invoice_number"] = pending
+    session.modified = True
+    return pending
+
+
 def current_cart(session):
     return session.setdefault("cart", {})
 
@@ -130,6 +140,7 @@ def remove_cart_item(session, batch_id):
 
 def clear_cart(session):
     session["cart"] = {}
+    session.pop("pending_invoice_number", None)
     session.modified = True
 
 
@@ -187,8 +198,12 @@ def finalize_checkout(session, checkout_data, user=None):
         payment_status = SalesInvoice.PAYMENT_PARTIAL
 
     customer = _resolve_customer(checkout_data.get("customer_name"), checkout_data.get("customer_phone"))
+    invoice_number = session.pop("pending_invoice_number", None)
+    if not invoice_number or SalesInvoice.objects.filter(invoice_number=invoice_number).exists():
+        invoice_number = generate_invoice_number()
+    session.modified = True
     invoice = SalesInvoice.objects.create(
-        invoice_number=generate_invoice_number(),
+        invoice_number=invoice_number,
         customer=customer,
         customer_name=(checkout_data.get("customer_name") or getattr(customer, "name", "") or "Walk-in Customer"),
         customer_phone=(checkout_data.get("customer_phone") or getattr(customer, "phone", "")),

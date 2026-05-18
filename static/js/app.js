@@ -29,7 +29,7 @@
         ${productImageMarkup(batch.image)}
         <div class="flex-grow-1">
           <strong>${batch.name}</strong>
-          <small>${batch.generic_name || batch.brand || "Medicine"} · Batch ${batch.batch_number} · Stock ${batch.stock_quantity}</small>
+          <small>${batch.generic_name || batch.brand || "Medicine"} · ${batch.strength || "Default"} · Batch ${batch.batch_number} · Stock ${batch.stock_quantity}</small>
         </div>
         <div class="text-end">
           <strong>${batch.tp_price}</strong>
@@ -87,21 +87,82 @@
     });
   }
 
-  function openQuickModal(batch) {
+  let quickVariants = [];
+  let selectedVariant = null;
+  let selectedBatch = null;
+  let selectedPriceType = "tp";
+
+  function renderStrengthOptions() {
+    const container = document.getElementById("quickStrengthOptions");
+    if (!container) {
+      return;
+    }
+    container.innerHTML = quickVariants.map((variant, index) => `
+      <button type="button" class="btn ${variant === selectedVariant ? "btn-primary" : "btn-outline-primary"}" data-variant-index="${index}">
+        ${variant.strength} <span class="badge text-bg-light ms-1">${variant.total_stock}</span>
+      </button>
+    `).join("");
+  }
+
+  function renderBatchOptions() {
+    const select = document.getElementById("quickBatchSelect");
+    if (!select || !selectedVariant) {
+      return;
+    }
+    select.innerHTML = selectedVariant.batches.map((batch) => `
+      <option value="${batch.batch_id}">Batch ${batch.batch_number} · Stock ${batch.stock_quantity} · Exp ${batch.expiry_date}</option>
+    `).join("");
+    selectedBatch = selectedVariant.batches[0];
+    updateSelectedBatch();
+  }
+
+  function updateSelectedBatch() {
+    const select = document.getElementById("quickBatchSelect");
+    if (select && selectedVariant) {
+      selectedBatch = selectedVariant.batches.find((batch) => String(batch.batch_id) === String(select.value)) || selectedVariant.batches[0];
+    }
+    if (!selectedBatch) {
+      return;
+    }
+    document.getElementById("quickBatchId").value = selectedBatch.batch_id;
+    document.getElementById("quickQuantity").value = 1;
+    document.getElementById("quickQuantity").max = selectedBatch.stock_quantity;
+    document.getElementById("quickUnitPrice").textContent = money(selectedPriceType === "mrp" ? selectedBatch.mrp : selectedBatch.tp_price);
+    document.getElementById("quickStockInfo").textContent = `${selectedBatch.stock_quantity} units available in batch ${selectedBatch.batch_number}. TP ${money(selectedBatch.tp_price)} / MRP ${money(selectedBatch.mrp)}.`;
+  }
+
+  async function openQuickModal(batch) {
     const modalEl = document.getElementById("quickProductModal");
     if (!modalEl) {
       return;
     }
+    const response = await fetch(`/api/products/${batch.product_id}/variants/`);
+    const data = response.ok ? await response.json() : { variants: [] };
+    quickVariants = data.variants.length ? data.variants : [{
+      product_id: batch.product_id,
+      name: batch.name,
+      strength: batch.strength || "Default",
+      generic_name: batch.generic_name,
+      image: batch.image,
+      total_stock: batch.stock_quantity,
+      batches: [batch],
+    }];
+    selectedVariant = quickVariants.find((variant) => variant.product_id === batch.product_id) || quickVariants[0];
+    selectedBatch = selectedVariant.batches.find((item) => item.batch_id === batch.batch_id) || selectedVariant.batches[0];
+    selectedPriceType = "tp";
     document.getElementById("quickProductName").textContent = batch.name;
-    document.getElementById("quickProductMeta").textContent = `${batch.generic_name || "Medicine"} · Batch ${batch.batch_number} · Exp ${batch.expiry_date}`;
-    document.getElementById("quickBatchId").value = batch.batch_id;
-    document.getElementById("quickQuantity").value = 1;
-    document.getElementById("quickQuantity").max = batch.stock_quantity;
-    document.getElementById("quickUnitPrice").value = batch.tp_price;
-    document.getElementById("quickDiscount").value = "0.00";
-    document.getElementById("quickStockInfo").textContent = `${batch.stock_quantity} units available. MRP ${batch.mrp}.`;
+    document.getElementById("quickProductMeta").textContent = `${batch.generic_name || "Medicine"} · Choose strength, batch, and TP/MRP`;
+    document.getElementById("quickPriceType").value = "tp";
+    document.querySelectorAll("[data-price-type]").forEach((button) => {
+      button.classList.toggle("btn-primary", button.dataset.priceType === "tp");
+      button.classList.toggle("btn-outline-primary", button.dataset.priceType !== "tp");
+    });
     const image = document.getElementById("quickProductImage");
-    image.innerHTML = batch.image ? `<img src="${batch.image}" alt="${batch.name}">` : '<i class="bi bi-capsule-pill"></i>';
+    image.innerHTML = selectedVariant.image ? `<img src="${selectedVariant.image}" alt="${batch.name}">` : '<i class="bi bi-capsule-pill"></i>';
+    renderStrengthOptions();
+    renderBatchOptions();
+    document.getElementById("quickBatchSelect").value = selectedBatch.batch_id;
+    updateSelectedBatch();
     bootstrap.Modal.getOrCreateInstance(modalEl).show();
   }
 
@@ -129,7 +190,7 @@
       return;
     }
     if (!cart.items.length) {
-      body.innerHTML = '<tr class="empty-cart"><td colspan="7" class="text-center text-muted py-4">Search and add a medicine to begin.</td></tr>';
+      body.innerHTML = '<tr class="empty-cart"><td colspan="6" class="text-center text-muted py-4">Search and add a medicine to begin.</td></tr>';
     } else {
       body.innerHTML = cart.items.map((item) => `
         <tr data-batch-id="${item.batch_id}">
@@ -137,7 +198,6 @@
           <td>${item.batch_number}</td>
           <td>${item.quantity}</td>
           <td>${item.unit_price}</td>
-          <td>${item.discount_amount}</td>
           <td>${item.line_total}</td>
           <td><button class="btn btn-sm btn-outline-danger" data-remove-cart="${item.batch_id}"><i class="bi bi-trash"></i></button></td>
         </tr>
@@ -181,8 +241,7 @@
         const cart = await cartRequest("/api/cart/add/", {
           batch_id: document.getElementById("quickBatchId").value,
           quantity: document.getElementById("quickQuantity").value,
-          unit_price: document.getElementById("quickUnitPrice").value,
-          discount_amount: document.getElementById("quickDiscount").value,
+          price_type: document.getElementById("quickPriceType").value,
         });
         renderCart(cart);
         bootstrap.Modal.getOrCreateInstance(document.getElementById("quickProductModal")).hide();
@@ -190,6 +249,34 @@
         alert(error.message);
       }
     });
+  }
+
+  document.addEventListener("click", (event) => {
+    const variantButton = event.target.closest("[data-variant-index]");
+    if (variantButton) {
+      selectedVariant = quickVariants[Number(variantButton.dataset.variantIndex)];
+      renderStrengthOptions();
+      renderBatchOptions();
+    }
+    const priceButton = event.target.closest("[data-price-type]");
+    if (priceButton) {
+      selectedPriceType = priceButton.dataset.priceType;
+      document.getElementById("quickPriceType").value = selectedPriceType;
+      document.querySelectorAll("[data-price-type]").forEach((button) => {
+        button.classList.toggle("btn-primary", button === priceButton);
+        button.classList.toggle("btn-outline-primary", button !== priceButton);
+      });
+      updateSelectedBatch();
+    }
+    const row = event.target.closest(".clickable-row");
+    if (row && !event.target.closest("a, button, input, select, textarea")) {
+      window.location.href = row.dataset.href;
+    }
+  });
+
+  const batchSelect = document.getElementById("quickBatchSelect");
+  if (batchSelect) {
+    batchSelect.addEventListener("change", updateSelectedBatch);
   }
 
   document.addEventListener("click", async (event) => {
@@ -269,28 +356,52 @@
     const values = months.map((item) => Number(item.total));
     const max = Math.max(...values, 1);
     const padding = 34;
-    const barWidth = Math.max((width - padding * 2) / months.length - 12, 18);
+    const chartWidth = width - padding * 2;
+    const chartHeight = height - padding * 2;
     ctx.fillStyle = "#e2e8f0";
     ctx.fillRect(padding, height - padding, width - padding * 2, 1);
-    months.forEach((item, index) => {
-      const x = padding + index * (barWidth + 12);
-      const barHeight = (Number(item.total) / max) * (height - padding * 2);
-      const y = height - padding - barHeight;
-      const gradient = ctx.createLinearGradient(0, y, 0, height - padding);
-      gradient.addColorStop(0, "#2563eb");
-      gradient.addColorStop(1, "#93c5fd");
-      ctx.fillStyle = gradient;
-      ctx.roundRect(x, y, barWidth, barHeight, 8);
+    const points = months.map((item, index) => {
+      const x = padding + (months.length === 1 ? chartWidth / 2 : index * (chartWidth / (months.length - 1)));
+      const y = height - padding - (Number(item.total) / max) * chartHeight;
+      return { x, y, item };
+    });
+    ctx.strokeStyle = "#dbeafe";
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i += 1) {
+      const y = padding + i * (chartHeight / 4);
+      ctx.beginPath();
+      ctx.moveTo(padding, y);
+      ctx.lineTo(width - padding, y);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = "#2563eb";
+    ctx.lineWidth = 4;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      if (index === 0) {
+        ctx.moveTo(point.x, point.y);
+      } else {
+        ctx.lineTo(point.x, point.y);
+      }
+    });
+    ctx.stroke();
+    points.forEach(({ x, y, item }) => {
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(x, y, 6, 0, Math.PI * 2);
       ctx.fill();
+      ctx.strokeStyle = "#2563eb";
+      ctx.lineWidth = 3;
+      ctx.stroke();
       ctx.fillStyle = "#64748b";
       ctx.font = "11px sans-serif";
-      ctx.fillText(item.month, x, height - 10);
+      ctx.fillText(item.month, x - 18, height - 10);
     });
   }
 
-  if (CanvasRenderingContext2D.prototype.roundRect) {
-    drawDashboardChart();
-  }
+  drawDashboardChart();
 
   updateCheckoutPreview();
 })();

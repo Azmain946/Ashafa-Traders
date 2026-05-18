@@ -19,9 +19,9 @@
 </div>
 
 <div class="metric-grid">
-  <div class="metric-card blue"><span>Total sales</span><strong>{{ metrics.total_sales }}</strong><i class="bi bi-graph-up-arrow"></i></div>
-  <div class="metric-card green"><span>Total profit</span><strong>{{ metrics.total_profit }}</strong><i class="bi bi-cash-coin"></i></div>
-  <div class="metric-card orange"><span>Total due</span><strong>{{ metrics.total_due }}</strong><i class="bi bi-exclamation-circle"></i></div>
+  <div class="metric-card blue"><span>Total sales</span><strong>{{ metrics.total_sales|floatformat:3 }}</strong><i class="bi bi-graph-up-arrow"></i></div>
+  <div class="metric-card green"><span>Total profit</span><strong>{{ metrics.total_profit|floatformat:3 }}</strong><i class="bi bi-cash-coin"></i></div>
+  <div class="metric-card orange"><span>Total due</span><strong>{{ metrics.total_due|floatformat:3 }}</strong><i class="bi bi-exclamation-circle"></i></div>
   <div class="metric-card purple"><span>Total customers</span><strong>{{ metrics.total_customers }}</strong><i class="bi bi-people"></i></div>
 </div>
 
@@ -40,7 +40,7 @@
     <div class="card soft-card">
       <div class="card-body">
         <h2 class="h5">Supplier due amount</h2>
-        <div class="big-number">{{ metrics.supplier_due }}</div>
+        <div class="big-number">{{ metrics.supplier_due|floatformat:3 }}</div>
         <p class="text-muted mb-0">Track supplier liability from purchase invoices.</p>
       </div>
     </div>
@@ -52,6 +52,7 @@
     <div class="card table-card">
       <div class="card-header bg-white"><strong>Top 5 buying customers</strong></div>
       <table class="table mb-0 align-middle">
+        <thead><tr><th>Customer</th><th>Phone number</th><th class="text-end">Total buy</th></tr></thead>
         <tbody>
           {% for customer in metrics.top_buying %}
             <tr><td>{{ customer.name }}</td><td>{{ customer.phone }}</td><td class="text-end"><strong>{{ customer.total }}</strong></td></tr>
@@ -66,6 +67,7 @@
     <div class="card table-card">
       <div class="card-header bg-white"><strong>Top 5 due customers</strong></div>
       <table class="table mb-0 align-middle">
+        <thead><tr><th>Customer</th><th>Phone number</th><th class="text-end">Total due</th></tr></thead>
         <tbody>
           {% for customer in metrics.top_due %}
             <tr><td>{{ customer.name }}</td><td>{{ customer.phone }}</td><td class="text-end text-danger"><strong>{{ customer.total }}</strong></td></tr>

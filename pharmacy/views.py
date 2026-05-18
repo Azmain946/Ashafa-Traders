@@ -10,6 +10,8 @@ from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
 from .forms import (
@@ -19,6 +21,7 @@ from .forms import (
     CheckoutForm,
     CustomerForm,
     ProductBatchForm,
+    ProductEntryForm,
     ProductForm,
     ReturnLookupForm,
     StockAdjustmentForm,
@@ -50,6 +53,7 @@ from .services import (
     process_return,
     remove_cart_item,
     reminder_data,
+    reserve_order_number,
     search_products,
 )
 
@@ -83,14 +87,17 @@ def home(request):
 
 
 @login_required
+@never_cache
 def order_page(request):
     checkout_form = CheckoutForm()
+    order_number = reserve_order_number(request.session)
     return render(
         request,
         "pharmacy/order.html",
         {
             "cart": cart_summary(request.session),
             "checkout_form": checkout_form,
+            "order_number": order_number,
         },
     )
 
@@ -121,7 +128,13 @@ def dashboard(request):
 @login_required
 def products(request):
     query = request.GET.get("q", "").strip()
+    category_id = request.GET.get("category", "").strip()
+    categories = ProductCategory.objects.prefetch_related("products").order_by("name")
     qs = Product.objects.select_related("category", "brand").prefetch_related("batches").order_by("name")
+    selected_category = None
+    if category_id:
+        selected_category = get_object_or_404(ProductCategory, pk=category_id)
+        qs = qs.filter(category=selected_category)
     if query:
         qs = qs.filter(
             Q(name__icontains=query)
@@ -129,19 +142,28 @@ def products(request):
             | Q(barcode__icontains=query)
             | Q(batches__batch_number__icontains=query)
         ).distinct()
-    return render(request, "pharmacy/products.html", {"page_obj": paginate(request, qs), "query": query})
+    return render(
+        request,
+        "pharmacy/products.html",
+        {
+            "page_obj": paginate(request, qs),
+            "query": query,
+            "categories": categories,
+            "selected_category": selected_category,
+        },
+    )
 
 
 @login_required
 def product_create(request):
     if request.method == "POST":
-        form = ProductForm(request.POST, request.FILES)
+        form = ProductEntryForm(request.POST, request.FILES)
         if form.is_valid():
             product = form.save()
             messages.success(request, "Product created.")
             return redirect("product_detail", pk=product.pk)
     else:
-        form = ProductForm()
+        form = ProductEntryForm()
     return render(request, "pharmacy/product_form.html", {"form": form, "title": "Add product"})
 
 
@@ -381,6 +403,8 @@ def api_product_search(request):
                 "batch_id": batch.id,
                 "product_id": batch.product_id,
                 "name": batch.product.display_name,
+                "product_name": batch.product.name,
+                "strength": batch.product.strength,
                 "generic_name": batch.product.generic_name,
                 "brand": batch.product.brand.name if batch.product.brand else "",
                 "batch_number": batch.batch_number,
@@ -395,16 +419,65 @@ def api_product_search(request):
 
 
 @login_required
+@require_GET
+def api_product_variants(request, pk):
+    selected = get_object_or_404(Product, pk=pk)
+    products = (
+        Product.objects.filter(name__iexact=selected.name, is_active=True)
+        .select_related("brand")
+        .prefetch_related("batches")
+        .order_by("strength", "name")
+    )
+    variants = []
+    for product in products:
+        batches = [
+            batch
+            for batch in product.batches.all()
+            if batch.is_active and batch.stock_quantity > 0 and batch.expiry_date > timezone.localdate()
+        ]
+        if not batches:
+            continue
+        image = product.thumbnail.url if product.thumbnail else product.image.url if product.image else ""
+        variants.append(
+            {
+                "product_id": product.id,
+                "name": product.display_name,
+                "strength": product.strength or "Default",
+                "generic_name": product.generic_name,
+                "image": image,
+                "total_stock": sum(batch.stock_quantity for batch in batches),
+                "batches": [
+                    {
+                        "batch_id": batch.id,
+                        "batch_number": batch.batch_number,
+                        "expiry_date": batch.expiry_date.isoformat(),
+                        "stock_quantity": batch.stock_quantity,
+                        "tp_price": str(batch.tp_price),
+                        "mrp": str(batch.mrp),
+                    }
+                    for batch in sorted(batches, key=lambda item: (item.expiry_date, item.batch_number))
+                ],
+            }
+        )
+    return JsonResponse({"variants": variants})
+
+
+@login_required
 @require_POST
 def api_cart_add(request):
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
+        unit_price = payload.get("unit_price")
+        price_type = payload.get("price_type")
+        if price_type in {"tp", "mrp"}:
+            batch = ProductBatch.objects.get(pk=payload.get("batch_id"), is_active=True)
+            unit_price = batch.mrp if price_type == "mrp" else batch.tp_price
         summary = add_or_update_cart_item(
             request.session,
             payload.get("batch_id"),
             payload.get("quantity", 1),
-            payload.get("unit_price"),
-            payload.get("discount_amount", 0),
+            unit_price,
+            0,
             replace=payload.get("replace", False),
         )
         return JsonResponse(cart_payload(summary))

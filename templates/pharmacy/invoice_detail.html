@@ -28,10 +28,6 @@
       <strong>{{ invoice.customer_name|default:"Walk-in Customer" }}</strong>
       <p>{{ invoice.customer_phone }}</p>
     </div>
-    <div class="text-end">
-      <span>Status</span>
-      <strong>{{ invoice.get_payment_status_display }}</strong>
-    </div>
   </div>
   <div class="table-responsive">
     <table class="table invoice-table">

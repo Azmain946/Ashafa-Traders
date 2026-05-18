@@ -28,7 +28,18 @@ from .models import (
 class ProductBatchInline(admin.TabularInline):
     model = ProductBatch
     extra = 0
-    fields = ("batch_number", "expiry_date", "buy_price", "tp_price", "mrp", "stock_quantity", "shelf_number", "is_active")
+    fields = (
+        "batch_number",
+        "mfg_date",
+        "expiry_date",
+        "number_of_boxes",
+        "units_per_box",
+        "buy_price_per_box",
+        "tp_price_per_box",
+        "mrp_per_box",
+        "stock_quantity",
+        "shelf_number",
+    )
 
 
 @admin.register(Product)
@@ -41,7 +52,7 @@ class ProductAdmin(admin.ModelAdmin):
 
 @admin.register(ProductBatch)
 class ProductBatchAdmin(admin.ModelAdmin):
-    list_display = ("product", "batch_number", "expiry_date", "tp_price", "mrp", "stock_quantity", "shelf_number")
+    list_display = ("product", "batch_number", "mfg_date", "expiry_date", "tp_price", "mrp", "stock_quantity", "shelf_number")
     list_filter = ("expiry_date", "is_active")
     search_fields = ("product__name", "product__generic_name", "batch_number")
 

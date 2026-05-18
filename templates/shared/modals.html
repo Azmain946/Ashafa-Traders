@@ -13,18 +13,30 @@
           <div class="medicine-preview" id="quickProductImage"><i class="bi bi-capsule-pill"></i></div>
           <div class="flex-grow-1">
             <input type="hidden" id="quickBatchId">
+            <input type="hidden" id="quickPriceType" value="tp">
             <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Strength</label>
+                <div class="variant-pills" id="quickStrengthOptions"></div>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Available stock by batch</label>
+                <select class="form-select" id="quickBatchSelect"></select>
+              </div>
               <div class="col-6">
                 <label class="form-label">Quantity</label>
                 <input type="number" class="form-control" id="quickQuantity" min="1" value="1">
               </div>
               <div class="col-6">
-                <label class="form-label">TP price</label>
-                <input type="number" class="form-control" id="quickUnitPrice" step="0.01" min="0">
+                <label class="form-label">Price type</label>
+                <div class="btn-group w-100" role="group" aria-label="Price type">
+                  <button type="button" class="btn btn-primary" data-price-type="tp">TP</button>
+                  <button type="button" class="btn btn-outline-primary" data-price-type="mrp">MRP</button>
+                </div>
               </div>
               <div class="col-12">
-                <label class="form-label">Discount</label>
-                <input type="number" class="form-control" id="quickDiscount" step="0.01" min="0" value="0">
+                <label class="form-label">Selected price</label>
+                <button type="button" class="btn btn-light w-100 text-start" id="quickUnitPrice" disabled>0.00</button>
               </div>
             </div>
             <div class="small text-muted mt-3" id="quickStockInfo"></div>

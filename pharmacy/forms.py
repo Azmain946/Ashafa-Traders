@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django import forms
-from django.contrib.auth.forms import PasswordChangeForm, UserChangeForm
+from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -42,30 +42,115 @@ class ProductForm(BootstrapFormMixin, forms.ModelForm):
             "name",
             "generic_name",
             "strength",
-            "dosage_form",
             "category",
             "brand",
-            "sku",
-            "barcode",
-            "description",
             "image",
             "is_antibiotic",
-            "reorder_level",
-            "is_active",
         ]
+
+
+class BoxPriceMixin:
+    def _apply_box_values(self, batch):
+        boxes = self.cleaned_data["number_of_boxes"]
+        units = self.cleaned_data["units_per_box"]
+        batch.stock_quantity = boxes * units
+        batch.buy_price = (self.cleaned_data["buy_price_per_box"] / units).quantize(Decimal("0.01"))
+        batch.tp_price = (self.cleaned_data["tp_price_per_box"] / units).quantize(Decimal("0.01"))
+        batch.mrp = (self.cleaned_data["mrp_per_box"] / units).quantize(Decimal("0.01"))
+        return batch
+
+
+class ProductEntryForm(BoxPriceMixin, BootstrapFormMixin, forms.ModelForm):
+    batch_number = forms.CharField(max_length=100)
+    mfg_date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}), required=False)
+    expiry_date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
+    number_of_boxes = forms.IntegerField(min_value=1, initial=1)
+    units_per_box = forms.IntegerField(min_value=1, initial=1, label="Medicine per box")
+    buy_price_per_box = forms.DecimalField(min_value=0, decimal_places=2, max_digits=12)
+    tp_price_per_box = forms.DecimalField(min_value=0, decimal_places=2, max_digits=12, label="TP price per box")
+    mrp_per_box = forms.DecimalField(min_value=0, decimal_places=2, max_digits=12, label="MRP per box")
+    shelf_number = forms.CharField(max_length=80, required=False)
+
+    class Meta:
+        model = Product
+        fields = [
+            "name",
+            "generic_name",
+            "strength",
+            "category",
+            "brand",
+            "image",
+            "is_antibiotic",
+        ]
+
+    def clean(self):
+        cleaned = super().clean()
+        mfg_date = cleaned.get("mfg_date")
+        expiry_date = cleaned.get("expiry_date")
+        if mfg_date and expiry_date and mfg_date >= expiry_date:
+            self.add_error("mfg_date", "Manufacturing date must be before expiry date.")
+        return cleaned
+
+    def save(self, commit=True):
+        product = super().save(commit=commit)
+        batch = ProductBatch(
+            product=product,
+            batch_number=self.cleaned_data["batch_number"],
+            mfg_date=self.cleaned_data.get("mfg_date"),
+            expiry_date=self.cleaned_data["expiry_date"],
+            buy_price_per_box=self.cleaned_data["buy_price_per_box"],
+            tp_price_per_box=self.cleaned_data["tp_price_per_box"],
+            mrp_per_box=self.cleaned_data["mrp_per_box"],
+            number_of_boxes=self.cleaned_data["number_of_boxes"],
+            units_per_box=self.cleaned_data["units_per_box"],
+            shelf_number=self.cleaned_data.get("shelf_number", ""),
+        )
+        self._apply_box_values(batch)
+        if commit:
+            batch.full_clean()
+            batch.save()
+        self.created_batch = batch
+        return product
 
 
 class ProductBatchForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = ProductBatch
-        fields = ["batch_number", "expiry_date", "buy_price", "tp_price", "mrp", "stock_quantity", "shelf_number", "is_active"]
-        widgets = {"expiry_date": forms.DateInput(attrs={"type": "date"})}
+        fields = [
+            "batch_number",
+            "mfg_date",
+            "expiry_date",
+            "number_of_boxes",
+            "units_per_box",
+            "buy_price_per_box",
+            "tp_price_per_box",
+            "mrp_per_box",
+            "shelf_number",
+        ]
+        widgets = {
+            "mfg_date": forms.DateInput(attrs={"type": "date"}),
+            "expiry_date": forms.DateInput(attrs={"type": "date"}),
+        }
 
-    def clean_stock_quantity(self):
-        quantity = self.cleaned_data["stock_quantity"]
-        if quantity < 0:
-            raise ValidationError("Stock cannot be negative.")
-        return quantity
+    def clean(self):
+        cleaned = super().clean()
+        mfg_date = cleaned.get("mfg_date")
+        expiry_date = cleaned.get("expiry_date")
+        if mfg_date and expiry_date and mfg_date >= expiry_date:
+            self.add_error("mfg_date", "Manufacturing date must be before expiry date.")
+        return cleaned
+
+    def save(self, commit=True):
+        batch = super().save(commit=False)
+        boxes = self.cleaned_data["number_of_boxes"]
+        units = self.cleaned_data["units_per_box"]
+        batch.stock_quantity = boxes * units
+        batch.buy_price = (self.cleaned_data["buy_price_per_box"] / units).quantize(Decimal("0.01"))
+        batch.tp_price = (self.cleaned_data["tp_price_per_box"] / units).quantize(Decimal("0.01"))
+        batch.mrp = (self.cleaned_data["mrp_per_box"] / units).quantize(Decimal("0.01"))
+        if commit:
+            batch.save()
+        return batch
 
 
 class StockAdjustmentForm(BootstrapFormMixin, forms.Form):
