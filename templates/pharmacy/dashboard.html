@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Dashboard | Ashafa Pharmacy ERP{% endblock %}
+{% block content %}
+<div class="page-title">
+  <div>
+    <span class="eyebrow">Analytics</span>
+    <h1>Dashboard</h1>
+    <p>Sales, profit, dues, customer movement, and monthly growth.</p>
+  </div>
+  <form method="get" class="d-flex gap-2">
+    <input type="date" class="form-control" name="date">
+    <select class="form-select" name="range" onchange="this.form.submit()">
+      <option value="today" {% if range_key == 'today' %}selected{% endif %}>Today</option>
+      <option value="this_week" {% if range_key == 'this_week' %}selected{% endif %}>This week</option>
+      <option value="this_month" {% if range_key == 'this_month' %}selected{% endif %}>This month</option>
+      <option value="this_year" {% if range_key == 'this_year' %}selected{% endif %}>This year</option>
+    </select>
+  </form>
+</div>
+
+<div class="metric-grid">
+  <div class="metric-card blue"><span>Total sales</span><strong>{{ metrics.total_sales }}</strong><i class="bi bi-graph-up-arrow"></i></div>
+  <div class="metric-card green"><span>Total profit</span><strong>{{ metrics.total_profit }}</strong><i class="bi bi-cash-coin"></i></div>
+  <div class="metric-card orange"><span>Total due</span><strong>{{ metrics.total_due }}</strong><i class="bi bi-exclamation-circle"></i></div>
+  <div class="metric-card purple"><span>Total customers</span><strong>{{ metrics.total_customers }}</strong><i class="bi bi-people"></i></div>
+</div>
+
+<div class="row g-4 mt-1">
+  <div class="col-xl-8">
+    <div class="card soft-card">
+      <div class="card-body">
+        <div class="section-heading compact">
+          <div><h2>Month-by-month growth</h2><p>Sales and profit trend.</p></div>
+        </div>
+        <div class="chart-wrap"><canvas id="growthChart" height="120"></canvas></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="card soft-card">
+      <div class="card-body">
+        <h2 class="h5">Supplier due amount</h2>
+        <div class="big-number">{{ metrics.supplier_due }}</div>
+        <p class="text-muted mb-0">Track supplier liability from purchase invoices.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mt-1">
+  <div class="col-lg-6">
+    <div class="card table-card">
+      <div class="card-header bg-white"><strong>Top 5 buying customers</strong></div>
+      <table class="table mb-0 align-middle">
+        <tbody>
+          {% for customer in metrics.top_buying %}
+            <tr><td>{{ customer.name }}</td><td>{{ customer.phone }}</td><td class="text-end"><strong>{{ customer.total }}</strong></td></tr>
+          {% empty %}
+            <tr><td class="text-center text-muted py-4">No sales yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card table-card">
+      <div class="card-header bg-white"><strong>Top 5 due customers</strong></div>
+      <table class="table mb-0 align-middle">
+        <tbody>
+          {% for customer in metrics.top_due %}
+            <tr><td>{{ customer.name }}</td><td>{{ customer.phone }}</td><td class="text-end text-danger"><strong>{{ customer.total }}</strong></td></tr>
+          {% empty %}
+            <tr><td class="text-center text-muted py-4">No customer due.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+  window.dashboardRange = "{{ range_key }}";
+</script>
+{% endblock %}

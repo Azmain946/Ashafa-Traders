@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Order | Ashafa Pharmacy ERP{% endblock %}
+{% block content %}
+<div class="page-title">
+  <div>
+    <span class="eyebrow">Fast billing</span>
+    <h1>Order checkout</h1>
+    <p>Search medicines, choose a batch, and finalize a printable invoice.</p>
+  </div>
+  <span class="order-id">Order ID: auto on confirm</span>
+</div>
+
+<div class="row g-4">
+  <div class="col-xl-8">
+    <div class="card soft-card">
+      <div class="card-body">
+        <label class="form-label">Search product</label>
+        <div class="search-box">
+          <i class="bi bi-search"></i>
+          <input type="search" id="orderSearchInput" class="form-control form-control-lg" placeholder="Type medicine name, generic, barcode or batch...">
+          <div class="search-results shadow" id="orderSearchResults"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card table-card mt-4">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <strong>Order items</strong>
+        <span class="badge text-bg-primary" id="cartCount">{{ cart.count }} items</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead><tr><th>Medicine</th><th>Batch</th><th>Qty</th><th>Price</th><th>Discount</th><th>Subtotal</th><th></th></tr></thead>
+          <tbody id="cartTableBody">
+            {% for item in cart.items %}
+              <tr data-batch-id="{{ item.batch.id }}">
+                <td>{{ item.product.display_name }}</td>
+                <td>{{ item.batch.batch_number }}</td>
+                <td>{{ item.quantity }}</td>
+                <td>{{ item.unit_price }}</td>
+                <td>{{ item.discount_amount }}</td>
+                <td>{{ item.line_total }}</td>
+                <td><button class="btn btn-sm btn-outline-danger" data-remove-cart="{{ item.batch.id }}"><i class="bi bi-trash"></i></button></td>
+              </tr>
+            {% empty %}
+              <tr class="empty-cart"><td colspan="7" class="text-center text-muted py-4">Search and add a medicine to begin.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-4">
+    <form method="post" action="{% url 'checkout' %}" class="card soft-card checkout-card">
+      {% csrf_token %}
+      <div class="card-body">
+        <h2 class="h5 mb-3">Customer and payment</h2>
+        <div class="row g-3">
+          <div class="col-12">{{ checkout_form.customer_name.label_tag }}{{ checkout_form.customer_name }}</div>
+          <div class="col-12">{{ checkout_form.customer_phone.label_tag }}{{ checkout_form.customer_phone }}</div>
+          <div class="col-6">{{ checkout_form.discount_percent.label_tag }}{{ checkout_form.discount_percent }}</div>
+          <div class="col-6">{{ checkout_form.discount_amount.label_tag }}{{ checkout_form.discount_amount }}</div>
+          <div class="col-12">{{ checkout_form.paid_amount.label_tag }}{{ checkout_form.paid_amount }}</div>
+          <div class="col-12">{{ checkout_form.notes.label_tag }}{{ checkout_form.notes }}</div>
+        </div>
+        <div class="totals-panel mt-4">
+          <div><span>Subtotal</span><strong id="cartSubtotal">{{ cart.subtotal }}</strong></div>
+          <div><span>Discount</span><strong id="checkoutDiscountPreview">0.00</strong></div>
+          <div><span>Due</span><strong id="checkoutDuePreview">{{ cart.subtotal }}</strong></div>
+        </div>
+        <div class="paid-toggle">
+          <label class="form-check">
+            <input class="form-check-input" type="checkbox" id="markFullyPaid">
+            <span class="form-check-label">Fully paid</span>
+          </label>
+          <label class="form-check">
+            <input class="form-check-input" type="checkbox" id="markPartiallyPaid">
+            <span class="form-check-label">Partially paid</span>
+          </label>
+        </div>
+        <button class="btn btn-primary btn-lg w-100 mt-3"><i class="bi bi-check2-circle me-2"></i>Confirm order</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

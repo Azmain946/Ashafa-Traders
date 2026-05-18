@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Home | Ashafa Pharmacy ERP{% endblock %}
+{% block content %}
+<section class="hero-card">
+  <div>
+    <span class="eyebrow">Fast pharmacy billing</span>
+    <h1>Find medicine, check stock, and bill customers quickly.</h1>
+    <p>Use live search for barcode, batch, generic name, or brand. Staff can move from product discovery to checkout in seconds.</p>
+    <div class="d-flex flex-wrap gap-2">
+      <a href="{% url 'order' %}" class="btn btn-primary btn-lg"><i class="bi bi-cart-plus me-2"></i>Start order</a>
+      <a href="{% url 'products' %}" class="btn btn-light btn-lg"><i class="bi bi-box-seam me-2"></i>Manage stock</a>
+    </div>
+  </div>
+  <div class="hero-metrics">
+    <div><strong>{{ featured_products|length }}</strong><span>recent products</span></div>
+    <div><strong>{{ categories|length }}</strong><span>categories</span></div>
+    <div><strong>{{ recent_invoices|length }}</strong><span>recent invoices</span></div>
+  </div>
+</section>
+
+<div class="section-heading">
+  <div>
+    <h2>Medicine categories</h2>
+    <p>Clean grouping for quick staff navigation.</p>
+  </div>
+  <a href="{% url 'products' %}" class="btn btn-outline-primary">View all</a>
+</div>
+<div class="category-grid">
+  {% for category in categories %}
+    <a class="category-card" href="{% url 'products' %}?q={{ category.name }}">
+      <span style="background: {{ category.color }};"><i class="bi bi-grid"></i></span>
+      <strong>{{ category.name }}</strong>
+      <small>{{ category.products.count }} medicines</small>
+    </a>
+  {% empty %}
+    <div class="empty-state">No categories yet. Add products to get started.</div>
+  {% endfor %}
+</div>
+
+<div class="section-heading mt-4">
+  <div>
+    <h2>Recent and popular medicines</h2>
+    <p>Card view with stock and batch-aware shortcuts.</p>
+  </div>
+</div>
+<div class="product-grid">
+  {% for product in featured_products %}
+    <a class="product-card" href="{% url 'product_detail' product.pk %}">
+      <div class="product-image">
+        {% if product.thumbnail %}
+          <img src="{{ product.thumbnail.url }}" alt="{{ product.display_name }}">
+        {% elif product.image %}
+          <img src="{{ product.image.url }}" alt="{{ product.display_name }}">
+        {% else %}
+          <i class="bi bi-capsule-pill"></i>
+        {% endif %}
+      </div>
+      <div>
+        <strong>{{ product.display_name }}</strong>
+        <p>{{ product.generic_name|default:"No generic name" }}</p>
+      </div>
+      <div class="card-row">
+        <span class="badge text-bg-primary-subtle text-primary">{{ product.category|default:"Uncategorized" }}</span>
+        <span class="stock-pill">{{ product.total_stock }} in stock</span>
+      </div>
+    </a>
+  {% empty %}
+    <div class="empty-state">No products yet.</div>
+  {% endfor %}
+</div>
+
+<div class="section-heading mt-4">
+  <div>
+    <h2>Recent invoices</h2>
+    <p>Jump back to printable invoice details.</p>
+  </div>
+  <a href="{% url 'invoices' %}" class="btn btn-outline-primary">Invoices</a>
+</div>
+<div class="card table-card">
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead><tr><th>Invoice</th><th>Customer</th><th>Total</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for invoice in recent_invoices %}
+          <tr>
+            <td><a href="{% url 'invoice_detail' invoice.pk %}">{{ invoice.invoice_number }}</a></td>
+            <td>{{ invoice.customer_name }}</td>
+            <td>{{ invoice.grand_total }}</td>
+            <td><span class="badge rounded-pill text-bg-light">{{ invoice.get_payment_status_display }}</span></td>
+            <td class="text-end"><a href="{% url 'invoice_detail' invoice.pk %}" class="btn btn-sm btn-light">Open</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="text-center text-muted py-4">No invoices yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

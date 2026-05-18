@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Customers | Ashafa Pharmacy ERP{% endblock %}
+{% block content %}
+<div class="page-title">
+  <div>
+    <span class="eyebrow">Directory</span>
+    <h1>Customer directory</h1>
+    <p>Purchase history, paid totals, due totals, and invoice drill-downs.</p>
+  </div>
+</div>
+<form class="filter-bar" method="get">
+  <input class="form-control" name="q" value="{{ query }}" placeholder="Search customer ID, name or phone">
+  <select class="form-select" name="sort">
+    <option value="name" {% if sort == 'name' %}selected{% endif %}>Name</option>
+    <option value="bought" {% if sort == 'bought' %}selected{% endif %}>Total bought</option>
+    <option value="due" {% if sort == 'due' %}selected{% endif %}>Total due</option>
+    <option value="paid" {% if sort == 'paid' %}selected{% endif %}>Total paid</option>
+  </select>
+  <button class="btn btn-outline-primary">Apply</button>
+</form>
+<div class="card table-card">
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead><tr><th>Customer ID</th><th>Name</th><th>Phone</th><th>Total bought</th><th>Total due</th><th>Total paid</th><th></th></tr></thead>
+      <tbody>
+        {% for customer in page_obj %}
+          <tr>
+            <td>{{ customer.customer_code }}</td>
+            <td><strong>{{ customer.name }}</strong></td>
+            <td>{{ customer.phone }}</td>
+            <td>{{ customer.total_bought }}</td>
+            <td class="text-danger">{{ customer.total_due }}</td>
+            <td class="text-success">{{ customer.total_paid }}</td>
+            <td class="text-end"><a href="{% url 'customer_detail' customer.pk %}" class="btn btn-sm btn-light">History</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="text-center text-muted py-4">No customers found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "shared/pagination.html" %}
+{% endblock %}
