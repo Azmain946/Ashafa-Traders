@@ -1,0 +1,33 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>{% block title %}Ashafa Pharmacy ERP{% endblock %}</title>
+  <link href="{% static 'vendor/bootstrap/bootstrap.min.css' %}" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'vendor/bootstrap-icons/bootstrap-icons.min.css' %}">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  <div class="app-shell">
+    {% include "shared/sidebar.html" %}
+    <main class="app-main">
+      {% include "shared/header.html" %}
+      <div class="content-wrap">
+        {% include "shared/alerts.html" %}
+        {% block content %}{% endblock %}
+      </div>
+      {% include "shared/footer.html" %}
+    </main>
+  </div>
+
+  {% include "shared/modals.html" %}
+  <script src="{% static 'vendor/jquery/jquery-3.7.1.min.js' %}"></script>
+  <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
+  <script src="{% static 'js/app.js' %}"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

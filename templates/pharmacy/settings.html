@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Settings | Ashafa Pharmacy ERP{% endblock %}
+{% block content %}
+<div class="page-title">
+  <div>
+    <span class="eyebrow">Administration</span>
+    <h1>Settings</h1>
+    <p>Manage account, role, business details, invoice print preferences, and thresholds.</p>
+  </div>
+</div>
+<div class="row g-4">
+  <div class="col-xl-5">
+    <form method="post" class="card soft-card">
+      {% csrf_token %}
+      <input type="hidden" name="section" value="business">
+      <div class="card-body">
+        <h2 class="h5">Business and invoice settings</h2>
+        {% for field in setting_form %}
+          <div class="mb-3">
+            {% if field.field.widget.input_type == 'checkbox' %}
+              <label class="form-check">{{ field }} <span class="form-check-label">{{ field.label }}</span></label>
+            {% else %}
+              {{ field.label_tag }}{{ field }}
+            {% endif %}
+          </div>
+        {% endfor %}
+        <button class="btn btn-primary w-100">Save business settings</button>
+      </div>
+    </form>
+  </div>
+  <div class="col-xl-4">
+    <form method="post" enctype="multipart/form-data" class="card soft-card">
+      {% csrf_token %}
+      <input type="hidden" name="section" value="profile">
+      <div class="card-body">
+        <h2 class="h5">Profile and role</h2>
+        {% for field in profile_form %}
+          <div class="mb-3">{{ field.label_tag }}{{ field }}</div>
+        {% endfor %}
+        <button class="btn btn-primary w-100">Save profile</button>
+      </div>
+    </form>
+  </div>
+  <div class="col-xl-3">
+    <form method="post" class="card soft-card">
+      {% csrf_token %}
+      <input type="hidden" name="section" value="password">
+      <div class="card-body">
+        <h2 class="h5">Change password</h2>
+        {% for field in password_form %}
+          <div class="mb-3">{{ field.label_tag }}{{ field }}</div>
+        {% endfor %}
+        <button class="btn btn-outline-primary w-100">Update password</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
