@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+{% block title %}{{ product.name }} · {{ business_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+  <div>
+    <h1 class="h3 mb-1">{{ product.name }}</h1>
+    <p class="text-muted mb-0">
+      {{ product.generic_name|default:'' }}
+      {% if product.strength %}· {{ product.strength }}{% endif %}
+      {% if product.manufacturer %}· {{ product.manufacturer.name }}{% endif %}
+    </p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{% url 'inventory:product_edit' product.id %}" class="btn btn-light"><i class="bi bi-pencil"></i> Edit</a>
+    <a href="{% url 'inventory:product_list' %}" class="btn btn-light">Back to list</a>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card soft-card">
+      <div class="card-body text-center">
+        {% if product.image %}
+          <img src="{{ product.image.url }}" alt="{{ product.name }}" class="img-fluid rounded" style="max-height: 280px;" />
+        {% else %}
+          <div class="placeholder-thumb large"><i class="bi bi-capsule"></i></div>
+        {% endif %}
+        <div class="mt-3 d-flex justify-content-center gap-2 flex-wrap">
+          {% if product.is_antibiotic %}<span class="badge bg-warning-soft text-warning-emphasis">Antibiotic</span>{% endif %}
+          {% if product.requires_prescription %}<span class="badge bg-info-soft text-info-emphasis">Rx required</span>{% endif %}
+          <span class="badge bg-light text-dark">{{ product.get_dosage_form_display }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card soft-card mt-3">
+      <div class="card-body">
+        <h2 class="h6 mb-3">Stock summary</h2>
+        <div class="d-flex justify-content-between"><span class="text-muted">Total in stock</span><strong>{{ product.total_stock }}</strong></div>
+        <div class="d-flex justify-content-between"><span class="text-muted">Latest TP price</span><strong>{{ currency_symbol }}{{ product.latest_tp_price|floatformat:2 }}</strong></div>
+        <div class="d-flex justify-content-between"><span class="text-muted">Latest MRP</span><strong>{{ currency_symbol }}{{ product.latest_mrp|floatformat:2 }}</strong></div>
+        {% if product.category %}<div class="d-flex justify-content-between"><span class="text-muted">Category</span><strong>{{ product.category.name }}</strong></div>{% endif %}
+        {% if product.barcode %}<div class="d-flex justify-content-between"><span class="text-muted">Barcode</span><strong>{{ product.barcode }}</strong></div>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card soft-card">
+      <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <h2 class="h6 mb-0">Batches</h2>
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addBatchModal"><i class="bi bi-plus-lg"></i> Add batch</button>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Batch #</th><th>Expiry</th><th>Shelf</th><th class="text-end">Buy</th>
+              <th class="text-end">TP</th><th class="text-end">MRP</th><th class="text-end">Qty</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for b in batches %}
+              <tr>
+                <td><strong>{{ b.batch_number }}</strong></td>
+                <td>
+                  {{ b.expiry_date|date:'Y-m-d' }}
+                  {% if b.is_expired %}<span class="badge bg-danger-soft text-danger ms-2">Expired</span>
+                  {% elif b.days_to_expiry < 60 %}<span class="badge bg-warning-soft text-warning-emphasis ms-2">{{ b.days_to_expiry }}d</span>{% endif %}
+                </td>
+                <td>{{ b.shelf_location|default:'—' }}</td>
+                <td class="text-end">{{ currency_symbol }}{{ b.buy_price|floatformat:2 }}</td>
+                <td class="text-end">{{ currency_symbol }}{{ b.tp_price|floatformat:2 }}</td>
+                <td class="text-end">{{ currency_symbol }}{{ b.mrp|floatformat:2 }}</td>
+                <td class="text-end"><strong>{{ b.quantity }}</strong></td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="7" class="text-center text-muted py-4">No batches yet. Add one to start tracking stock.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card soft-card mt-3">
+      <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <h2 class="h6 mb-0">Quick stock adjustment</h2>
+      </div>
+      <div class="card-body">
+        <form method="post" action="{% url 'inventory:product_stock_adjust' product.id %}" class="row g-2">
+          {% csrf_token %}
+          <div class="col-md-4"><label class="form-label">Batch</label>{{ adjust_form.batch }}</div>
+          <div class="col-md-2"><label class="form-label">Action</label>{{ adjust_form.action }}</div>
+          <div class="col-md-2"><label class="form-label">Qty</label>{{ adjust_form.quantity }}</div>
+          <div class="col-md-3"><label class="form-label">Note</label>{{ adjust_form.note }}</div>
+          <div class="col-md-1 d-flex align-items-end"><button class="btn btn-primary w-100">Apply</button></div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card soft-card mt-3">
+      <div class="card-header bg-transparent"><h2 class="h6 mb-0">Recent stock movements</h2></div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead>
+            <tr><th>Date</th><th>Type</th><th>Batch</th><th class="text-end">Qty</th><th>Reference</th><th>By</th></tr>
+          </thead>
+          <tbody>
+            {% for m in movements %}
+              <tr>
+                <td>{{ m.created_at|date:'Y-m-d H:i' }}</td>
+                <td><span class="badge bg-light text-dark">{{ m.get_movement_type_display }}</span></td>
+                <td>{{ m.batch.batch_number }}</td>
+                <td class="text-end fw-semibold {% if m.quantity < 0 %}text-danger{% else %}text-success{% endif %}">{{ m.quantity }}</td>
+                <td>{{ m.reference|default:'—' }}</td>
+                <td>{{ m.user.username|default:'system' }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="6" class="text-center text-muted py-4">No movements yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="addBatchModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form class="modal-content" method="post" action="{% url 'inventory:product_batch_add' product.id %}">
+      {% csrf_token %}
+      <div class="modal-header">
+        <h5 class="modal-title">Add batch</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-6"><label class="form-label">Batch number</label>{{ batch_form.batch_number }}</div>
+          <div class="col-md-6"><label class="form-label">Expiry date</label>{{ batch_form.expiry_date }}</div>
+          <div class="col-md-4"><label class="form-label">Buy price</label>{{ batch_form.buy_price }}</div>
+          <div class="col-md-4"><label class="form-label">TP price</label>{{ batch_form.tp_price }}</div>
+          <div class="col-md-4"><label class="form-label">MRP</label>{{ batch_form.mrp }}</div>
+          <div class="col-md-6"><label class="form-label">Quantity</label>{{ batch_form.quantity }}</div>
+          <div class="col-md-6"><label class="form-label">Shelf / location</label>{{ batch_form.shelf_location }}</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save batch</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

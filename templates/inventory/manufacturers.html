@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block title %}Manufacturers · {{ business_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+  <h1 class="h3 mb-1">Manufacturers</h1>
+  <p class="text-muted mb-0">Brands and pharmaceutical companies for your inventory.</p>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card soft-card">
+      <div class="card-header bg-transparent"><h2 class="h6 mb-0">Add manufacturer</h2></div>
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+          <div class="mb-2"><label class="form-label">Name *</label>{{ form.name }}</div>
+          <div class="mb-3"><label class="form-label">Country</label>{{ form.country }}</div>
+          <button class="btn btn-primary w-100">Add manufacturer</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-8">
+    <div class="card soft-card">
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead><tr><th>Name</th><th>Country</th></tr></thead>
+          <tbody>
+            {% for m in manufacturers %}
+              <tr><td><strong>{{ m.name }}</strong></td><td>{{ m.country|default:'—' }}</td></tr>
+            {% empty %}
+              <tr><td colspan="2" class="text-center text-muted py-4">No manufacturers yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Home · {{ business_name }}{% endblock %}
+
+{% block content %}
+<section class="hero-card shadow-sm">
+  <div class="hero-text">
+    <span class="hero-eyebrow">Welcome back, {{ user.first_name|default:user.username }}</span>
+    <h1 class="h2 mb-2">Run your pharmacy with confidence.</h1>
+    <p class="text-muted mb-3">Browse medicines, manage stock, and serve customers — all in one place.</p>
+    <form action="{% url 'inventory:product_list' %}" method="get" class="hero-search">
+      <i class="bi bi-search"></i>
+      <input type="search" name="q" placeholder="Search medicines by name, generic or barcode…" autocomplete="off" />
+      <button type="submit" class="btn btn-primary">Search</button>
+    </form>
+  </div>
+  <div class="hero-stats">
+    <a href="{% url 'sales:order' %}" class="hero-stat">
+      <span class="stat-icon"><i class="bi bi-cart3"></i></span>
+      <div>
+        <div class="stat-label">New Order</div>
+        <div class="stat-value small text-muted">Start billing</div>
+      </div>
+    </a>
+    <a href="{% url 'inventory:reminders' %}" class="hero-stat">
+      <span class="stat-icon warning"><i class="bi bi-bell"></i></span>
+      <div>
+        <div class="stat-label">Reminders</div>
+        <div class="stat-value small text-muted">Low stock &amp; expiry</div>
+      </div>
+    </a>
+    <a href="{% url 'dashboard:metrics' %}" class="hero-stat">
+      <span class="stat-icon info"><i class="bi bi-graph-up"></i></span>
+      <div>
+        <div class="stat-label">Dashboard</div>
+        <div class="stat-value small text-muted">Sales &amp; profit</div>
+      </div>
+    </a>
+  </div>
+</section>
+
+<section class="mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h5 mb-0">Categories</h2>
+    <a class="btn btn-light btn-sm" href="{% url 'inventory:categories' %}">Manage categories</a>
+  </div>
+  <div class="category-grid">
+    {% for cat in categories %}
+      <a href="{% url 'inventory:product_list' %}?category={{ cat.id }}" class="category-card">
+        <span class="cat-icon"><i class="bi bi-{{ cat.icon|default:'capsule' }}"></i></span>
+        <div>
+          <div class="cat-title">{{ cat.name }}</div>
+          <div class="cat-meta text-muted small">{{ cat.product_count }} item{{ cat.product_count|pluralize }}</div>
+        </div>
+      </a>
+    {% empty %}
+      <p class="text-muted">No categories yet. <a href="{% url 'inventory:categories' %}">Add one</a>.</p>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="mt-5">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h5 mb-0">Featured medicines</h2>
+    <a class="btn btn-light btn-sm" href="{% url 'inventory:product_list' %}">See all</a>
+  </div>
+  <div class="product-grid">
+    {% for p in featured_products %}
+      <a href="{% url 'inventory:product_detail' p.id %}" class="product-card">
+        <div class="product-thumb">
+          {% if p.display_image %}
+            <img src="{{ p.display_image.url }}" alt="{{ p.name }}" loading="lazy" />
+          {% else %}
+            <div class="placeholder-thumb"><i class="bi bi-capsule"></i></div>
+          {% endif %}
+        </div>
+        <div class="product-meta">
+          <div class="product-name">{{ p.name }}</div>
+          <div class="product-sub text-muted small">{{ p.strength }} {% if p.manufacturer %}· {{ p.manufacturer.name }}{% endif %}</div>
+          <div class="product-price">{{ currency_symbol }}{{ p.latest_tp_price|floatformat:2 }}</div>
+        </div>
+      </a>
+    {% empty %}
+      <p class="text-muted">No products yet. <a href="{% url 'inventory:product_create' %}">Add the first one</a>.</p>
+    {% endfor %}
+  </div>
+</section>
+
+{% if recent_invoices %}
+<section class="mt-5">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h5 mb-0">Recent invoices</h2>
+    <a class="btn btn-light btn-sm" href="{% url 'sales:invoice_list' %}">All invoices</a>
+  </div>
+  <div class="card soft-card">
+    <div class="table-responsive">
+      <table class="table mb-0 align-middle">
+        <thead>
+          <tr><th>Invoice #</th><th>Customer</th><th>Date</th><th class="text-end">Total</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          {% for inv in recent_invoices %}
+            <tr>
+              <td><a href="{% url 'sales:invoice_detail' inv.id %}" class="link-primary">{{ inv.invoice_number }}</a></td>
+              <td>{{ inv.customer.name }}<div class="small text-muted">{{ inv.customer.phone }}</div></td>
+              <td>{{ inv.invoice_date }}</td>
+              <td class="text-end">{{ currency_symbol }}{{ inv.total|floatformat:2 }}</td>
+              <td>
+                <span class="badge rounded-pill {% if inv.payment_status == 'paid' %}bg-success-soft text-success{% elif inv.payment_status == 'partial' %}bg-warning-soft text-warning-emphasis{% else %}bg-danger-soft text-danger{% endif %}">
+                  {{ inv.get_payment_status_display }}
+                </span>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

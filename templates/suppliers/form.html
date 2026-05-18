@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block title %}{% if create %}New supplier{% else %}Edit supplier{% endif %} · {{ business_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+  <h1 class="h3 mb-1">{% if create %}New supplier{% else %}Edit supplier{% endif %}</h1>
+</div>
+<div class="card soft-card" style="max-width: 720px;">
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label">Name *</label>{{ form.name }}</div>
+        <div class="col-md-6"><label class="form-label">Contact person</label>{{ form.contact_person }}</div>
+        <div class="col-md-6"><label class="form-label">Phone</label>{{ form.phone }}</div>
+        <div class="col-md-6"><label class="form-label">Email</label>{{ form.email }}</div>
+        <div class="col-md-12"><label class="form-label">Address</label>{{ form.address }}</div>
+        <div class="col-md-12"><label class="form-label">Notes</label>{{ form.notes }}</div>
+      </div>
+      {% if form.errors %}<div class="alert alert-danger mt-3 py-2 small">{{ form.errors }}</div>{% endif %}
+      <div class="mt-3 d-flex gap-2">
+        <button class="btn btn-primary">Save supplier</button>
+        <a class="btn btn-light" href="{% url 'suppliers:list' %}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

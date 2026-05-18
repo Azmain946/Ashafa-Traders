@@ -1,0 +1,54 @@
+{% load static %}
+<aside class="sidebar shadow-sm">
+  <div class="sidebar-brand">
+    {% if app_setting.logo %}
+      <img src="{{ app_setting.logo.url }}" alt="logo" class="brand-logo" />
+    {% else %}
+      <span class="brand-mark"><i class="bi bi-capsule-pill"></i></span>
+    {% endif %}
+    <div class="brand-text">
+      <span class="brand-title">{{ business_name }}</span>
+      <span class="brand-subtitle">Pharmacy ERP</span>
+    </div>
+  </div>
+
+  <nav class="sidebar-nav">
+    <a href="{% url 'dashboard:home' %}" class="nav-item {% if request.resolver_match.namespace == 'dashboard' and request.resolver_match.url_name == 'home' %}active{% endif %}">
+      <i class="bi bi-house-door"></i><span>Home</span>
+    </a>
+    <a href="{% url 'dashboard:metrics' %}" class="nav-item {% if request.resolver_match.namespace == 'dashboard' and request.resolver_match.url_name == 'metrics' %}active{% endif %}">
+      <i class="bi bi-graph-up"></i><span>Dashboard</span>
+    </a>
+    <a href="{% url 'sales:order' %}" class="nav-item {% if request.resolver_match.namespace == 'sales' and 'order' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-cart3"></i><span>New Order</span>
+    </a>
+    <a href="{% url 'sales:invoice_list' %}" class="nav-item {% if request.resolver_match.namespace == 'sales' and 'invoice' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-receipt"></i><span>Invoices</span>
+    </a>
+    <a href="{% url 'inventory:product_list' %}" class="nav-item {% if request.resolver_match.namespace == 'inventory' and request.resolver_match.url_name != 'reminders' %}active{% endif %}">
+      <i class="bi bi-box-seam"></i><span>Inventory</span>
+    </a>
+    <a href="{% url 'customers:list' %}" class="nav-item {% if request.resolver_match.namespace == 'customers' %}active{% endif %}">
+      <i class="bi bi-people"></i><span>Customers</span>
+    </a>
+    <a href="{% url 'suppliers:list' %}" class="nav-item {% if request.resolver_match.namespace == 'suppliers' %}active{% endif %}">
+      <i class="bi bi-truck"></i><span>Suppliers</span>
+    </a>
+    <a href="{% url 'sales:returns' %}" class="nav-item {% if request.resolver_match.url_name == 'returns' %}active{% endif %}">
+      <i class="bi bi-arrow-counterclockwise"></i><span>Returns</span>
+    </a>
+    <a href="{% url 'sales:antibiotic_register' %}" class="nav-item {% if request.resolver_match.url_name == 'antibiotic_register' %}active{% endif %}">
+      <i class="bi bi-shield-plus"></i><span>Antibiotic Register</span>
+    </a>
+    <a href="{% url 'inventory:reminders' %}" class="nav-item {% if request.resolver_match.url_name == 'reminders' %}active{% endif %}">
+      <i class="bi bi-bell"></i><span>Reminders</span>
+    </a>
+    <a href="{% url 'accounts:settings' %}" class="nav-item {% if request.resolver_match.namespace == 'accounts' and request.resolver_match.url_name == 'settings' %}active{% endif %}">
+      <i class="bi bi-gear"></i><span>Settings</span>
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <span class="text-muted small">&copy; {% now "Y" %} {{ business_name }}</span>
+  </div>
+</aside>

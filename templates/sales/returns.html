@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% block title %}Returns · {{ business_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+  <h1 class="h3 mb-1">Returns</h1>
+  <p class="text-muted mb-0">Look up an invoice by number, date, or phone and record returned items.</p>
+</div>
+
+<form method="get" class="card soft-card mb-4">
+  <div class="card-body row g-2 align-items-end">
+    <div class="col-md-4"><label class="form-label">Invoice number</label>{{ lookup_form.invoice_number }}</div>
+    <div class="col-md-3"><label class="form-label">Invoice date</label>{{ lookup_form.invoice_date }}</div>
+    <div class="col-md-3"><label class="form-label">Customer phone</label>{{ lookup_form.phone }}</div>
+    <div class="col-md-2"><button class="btn btn-primary w-100">Find</button></div>
+  </div>
+</form>
+
+{% if matched_invoices and not invoice %}
+<div class="card soft-card mb-4">
+  <div class="card-header bg-transparent"><h2 class="h6 mb-0">Matched invoices</h2></div>
+  <ul class="list-group list-group-flush">
+    {% for inv in matched_invoices %}
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        <div>
+          <strong>{{ inv.invoice_number }}</strong>
+          <div class="small text-muted">{{ inv.invoice_date|date:'Y-m-d' }} · {{ inv.customer.name }} · {{ inv.customer.phone }}</div>
+        </div>
+        <a href="?invoice_number={{ inv.invoice_number }}" class="btn btn-light btn-sm">Open</a>
+      </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if invoice %}
+<form method="post" action="{% url 'sales:returns_submit' %}" class="card soft-card">
+  {% csrf_token %}
+  <input type="hidden" name="invoice_id" value="{{ invoice.id }}" />
+  <div class="card-header bg-transparent">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <h2 class="h6 mb-0">Return against {{ invoice.invoice_number }}</h2>
+        <div class="small text-muted">{{ invoice.customer.name }} · {{ invoice.customer.phone }} · {{ invoice.invoice_date|date:'Y-m-d' }}</div>
+      </div>
+      <div class="form-check">
+        <input type="checkbox" name="restock" id="restock" class="form-check-input" checked />
+        <label class="form-check-label" for="restock">Restock returned items</label>
+      </div>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead><tr><th>Product</th><th>Batch</th><th class="text-end">Sold qty</th><th class="text-end">Unit price</th><th class="text-end">Return qty</th></tr></thead>
+      <tbody>
+        {% for it in invoice.items.all %}
+          <tr>
+            <td>{{ it.product_name }}<input type="hidden" name="item_id" value="{{ it.id }}" /></td>
+            <td>{{ it.batch_number|default:'—' }}</td>
+            <td class="text-end">{{ it.quantity }}</td>
+            <td class="text-end">{{ currency_symbol }}{{ it.unit_price|floatformat:2 }}</td>
+            <td class="text-end"><input type="number" min="0" max="{{ it.quantity }}" value="0" class="form-control form-control-sm text-end" name="quantity" style="max-width: 100px; margin-left:auto;" /></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-body">
+    <label class="form-label">Reason</label>
+    <input type="text" name="reason" class="form-control" placeholder="Reason for return (optional)" />
+  </div>
+  <div class="card-footer bg-transparent">
+    <button class="btn btn-primary"><i class="bi bi-arrow-counterclockwise"></i> Submit return</button>
+  </div>
+</form>
+{% endif %}
+
+<div class="card soft-card mt-4">
+  <div class="card-header bg-transparent"><h2 class="h6 mb-0">Recent returns</h2></div>
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead><tr><th>Date</th><th>Invoice</th><th>Customer</th><th class="text-end">Refund</th><th>Reason</th></tr></thead>
+      <tbody>
+        {% for r in history %}
+          <tr>
+            <td>{{ r.return_date|date:'Y-m-d' }}</td>
+            <td>{% if r.invoice %}<a href="{% url 'sales:invoice_detail' r.invoice.id %}">{{ r.invoice.invoice_number }}</a>{% else %}—{% endif %}</td>
+            <td>{{ r.customer.name|default:'—' }}</td>
+            <td class="text-end">{{ currency_symbol }}{{ r.total_refund|floatformat:2 }}</td>
+            <td>{{ r.reason|default:'—' }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="text-center text-muted py-4">No returns recorded.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

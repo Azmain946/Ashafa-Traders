@@ -1,0 +1,36 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+.env
+.venv/
+venv/
+
+*.sqlite3
+*.sqlite3-journal
+
+# Django
+/staticfiles/
+/media/products/
+/media/products/thumbnails/
+/media/receipts/
+/media/branding/
+/media/avatars/
+/media/users/
+
+# Editors
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Logs
+*.log
+/tmp/
+
+# Build
+*.egg-info/
+build/
+dist/

@@ -1,0 +1,178 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard · {{ business_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+  <div>
+    <h1 class="page-title h3 mb-1">Dashboard</h1>
+    <p class="text-muted mb-0">Overview of sales, profits, customers and stock alerts.</p>
+  </div>
+  <form method="get" class="d-flex flex-wrap gap-2 align-items-center" id="dashboardFilter">
+    <select name="range" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value="today" {% if range_key == 'today' %}selected{% endif %}>Today</option>
+      <option value="week" {% if range_key == 'week' %}selected{% endif %}>This week</option>
+      <option value="month" {% if range_key == 'month' %}selected{% endif %}>This month</option>
+      <option value="year" {% if range_key == 'year' %}selected{% endif %}>This year</option>
+    </select>
+    <input type="date" name="start" value="{{ start|date:'Y-m-d' }}" class="form-control form-control-sm" />
+    <span class="text-muted small">to</span>
+    <input type="date" name="end" value="{{ end|date:'Y-m-d' }}" class="form-control form-control-sm" />
+    <button class="btn btn-primary btn-sm">Apply</button>
+  </form>
+</div>
+
+<div class="kpi-grid">
+  <div class="kpi-card primary">
+    <div class="kpi-icon"><i class="bi bi-cash-coin"></i></div>
+    <div>
+      <div class="kpi-label">Total sales</div>
+      <div class="kpi-value">{{ currency_symbol }}{{ total_sales|floatformat:2 }}</div>
+      <div class="kpi-sub">Paid: {{ currency_symbol }}{{ total_paid|floatformat:2 }}</div>
+    </div>
+  </div>
+  <div class="kpi-card success">
+    <div class="kpi-icon"><i class="bi bi-graph-up-arrow"></i></div>
+    <div>
+      <div class="kpi-label">Total profit</div>
+      <div class="kpi-value">{{ currency_symbol }}{{ total_profit|floatformat:2 }}</div>
+      <div class="kpi-sub">Selected range</div>
+    </div>
+  </div>
+  <div class="kpi-card warning">
+    <div class="kpi-icon"><i class="bi bi-exclamation-triangle"></i></div>
+    <div>
+      <div class="kpi-label">Total due</div>
+      <div class="kpi-value">{{ currency_symbol }}{{ total_due|floatformat:2 }}</div>
+      <div class="kpi-sub">All time</div>
+    </div>
+  </div>
+  <div class="kpi-card info">
+    <div class="kpi-icon"><i class="bi bi-people"></i></div>
+    <div>
+      <div class="kpi-label">Customers</div>
+      <div class="kpi-value">{{ total_customers }}</div>
+      <div class="kpi-sub">Total records</div>
+    </div>
+  </div>
+  <div class="kpi-card neutral">
+    <div class="kpi-icon"><i class="bi bi-box-seam"></i></div>
+    <div>
+      <div class="kpi-label">Low stock</div>
+      <div class="kpi-value">{{ low_stock_count }}</div>
+      <div class="kpi-sub">products at/below threshold</div>
+    </div>
+  </div>
+  <div class="kpi-card neutral">
+    <div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div>
+    <div>
+      <div class="kpi-label">Near expiry</div>
+      <div class="kpi-value">{{ near_expiry_count }}</div>
+      <div class="kpi-sub">batches</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mt-1">
+  <div class="col-xl-8">
+    <div class="card soft-card h-100">
+      <div class="card-body">
+        <h2 class="h6 mb-3">Monthly sales</h2>
+        <canvas id="growthChart" height="110" data-labels='{{ growth_labels|safe }}' data-values='{{ growth_values|safe }}'></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="card soft-card h-100">
+      <div class="card-body">
+        <h2 class="h6 mb-3">Top buying customers</h2>
+        <ul class="ranked-list">
+          {% for c in top_buying %}
+            <li>
+              <span class="rank">{{ forloop.counter }}</span>
+              <div class="flex-grow-1">
+                <div class="fw-semibold">{{ c.name }}</div>
+                <div class="small text-muted">{{ c.phone }}</div>
+              </div>
+              <span class="fw-semibold">{{ currency_symbol }}{{ c.spent|floatformat:2 }}</span>
+            </li>
+          {% empty %}<li class="text-muted">No data yet.</li>{% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-6">
+    <div class="card soft-card h-100">
+      <div class="card-body">
+        <h2 class="h6 mb-3">Top due customers</h2>
+        <ul class="ranked-list">
+          {% for c in top_due %}
+            <li>
+              <span class="rank danger">{{ forloop.counter }}</span>
+              <div class="flex-grow-1">
+                <div class="fw-semibold">{{ c.name }}</div>
+                <div class="small text-muted">{{ c.phone }}</div>
+              </div>
+              <span class="fw-semibold text-danger">{{ currency_symbol }}{{ c.due|floatformat:2 }}</span>
+            </li>
+          {% empty %}<li class="text-muted">No outstanding dues. 🎉</li>{% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-6">
+    <div class="card soft-card h-100">
+      <div class="card-body">
+        <h2 class="h6 mb-3">Suppliers due</h2>
+        <ul class="ranked-list">
+          {% for s in suppliers_due %}
+            <li>
+              <span class="rank info">{{ forloop.counter }}</span>
+              <div class="flex-grow-1">
+                <div class="fw-semibold">{{ s.name }}</div>
+                <div class="small text-muted">{{ s.phone }}</div>
+              </div>
+              <span class="fw-semibold text-info">{{ currency_symbol }}{{ s.due|floatformat:2 }}</span>
+            </li>
+          {% empty %}<li class="text-muted">All clear with suppliers.</li>{% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+  (function () {
+    const ctx = document.getElementById('growthChart');
+    if (!ctx) return;
+    const labels = JSON.parse(ctx.dataset.labels || '[]');
+    const values = JSON.parse(ctx.dataset.values || '[]');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Sales',
+          data: values,
+          borderColor: '#2563eb',
+          backgroundColor: 'rgba(37, 99, 235, 0.12)',
+          fill: true,
+          tension: 0.35,
+          pointRadius: 4,
+          pointBackgroundColor: '#2563eb',
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, ticks: { color: '#64748b' }, grid: { color: 'rgba(148,163,184,0.18)' } },
+          x: { ticks: { color: '#64748b' }, grid: { display: false } }
+        }
+      }
+    });
+  })();
+</script>
+{% endblock %}

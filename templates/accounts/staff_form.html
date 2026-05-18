@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block title %}{% if user_obj %}Edit user{% else %}Add user{% endif %} · {{ business_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+  <h1 class="h3 mb-1">{% if user_obj %}Edit user{% else %}Add new user{% endif %}</h1>
+  <p class="text-muted mb-0">Set credentials and role for this staff member.</p>
+</div>
+<div class="card soft-card" style="max-width: 720px;">
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label">Username</label>{{ form.username }}</div>
+        <div class="col-md-6"><label class="form-label">Email</label>{{ form.email }}</div>
+        <div class="col-md-6"><label class="form-label">First name</label>{{ form.first_name }}</div>
+        <div class="col-md-6"><label class="form-label">Last name</label>{{ form.last_name }}</div>
+        <div class="col-md-6"><label class="form-label">Role</label>{{ form.role }}</div>
+        <div class="col-md-6"><label class="form-label">Password</label>{{ form.password }}<div class="form-text">Leave blank to keep existing password.</div></div>
+      </div>
+      {% if form.errors %}
+        <div class="alert alert-danger mt-3 py-2 small">{{ form.errors }}</div>
+      {% endif %}
+      <div class="d-flex gap-2 mt-3">
+        <button class="btn btn-primary" type="submit">Save user</button>
+        <a class="btn btn-light" href="{% url 'accounts:settings' %}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

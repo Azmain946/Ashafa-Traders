@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block title %}Customers · {{ business_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+  <div>
+    <h1 class="h3 mb-1">Customer directory</h1>
+    <p class="text-muted mb-0">Search, sort and review purchase history.</p>
+  </div>
+  <a href="{% url 'customers:create' %}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> New customer</a>
+</div>
+
+<form method="get" class="card soft-card mb-4">
+  <div class="card-body d-flex flex-wrap gap-2 align-items-center">
+    <div class="input-group" style="max-width: 360px;">
+      <span class="input-group-text"><i class="bi bi-search"></i></span>
+      <input type="search" name="q" value="{{ q }}" class="form-control" placeholder="Name or phone" />
+    </div>
+    <select name="sort" class="form-select" style="max-width: 220px;">
+      <option value="">Sort by name</option>
+      <option value="bought" {% if sort == 'bought' %}selected{% endif %}>Top bought</option>
+      <option value="paid" {% if sort == 'paid' %}selected{% endif %}>Top paid</option>
+      <option value="due" {% if sort == 'due' %}selected{% endif %}>Top due</option>
+    </select>
+    <button class="btn btn-primary">Apply</button>
+  </div>
+</form>
+
+<div class="card soft-card">
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead>
+        <tr><th>ID</th><th>Name</th><th>Phone</th><th class="text-end">Bought</th><th class="text-end">Paid</th><th class="text-end">Due</th></tr>
+      </thead>
+      <tbody>
+        {% for c in customers %}
+          <tr onclick="window.location='{% url 'customers:detail' c.id %}'" style="cursor:pointer">
+            <td class="text-muted small">{{ c.code }}</td>
+            <td><strong>{{ c.name }}</strong></td>
+            <td>{{ c.phone }}</td>
+            <td class="text-end">{{ currency_symbol }}{{ c.total_bought|default:0|floatformat:2 }}</td>
+            <td class="text-end">{{ currency_symbol }}{{ c.total_paid|default:0|floatformat:2 }}</td>
+            <td class="text-end {% if c.total_due %}text-danger fw-semibold{% endif %}">{{ currency_symbol }}{{ c.total_due|default:0|floatformat:2 }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="text-center text-muted py-4">No customers yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if customers.has_other_pages %}
+<nav class="mt-4">
+  <ul class="pagination justify-content-center">
+    {% if customers.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ customers.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}">Previous</a></li>{% endif %}
+    <li class="page-item disabled"><span class="page-link">Page {{ customers.number }} of {{ customers.paginator.num_pages }}</span></li>
+    {% if customers.has_next %}<li class="page-item"><a class="page-link" href="?page={{ customers.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}">Next</a></li>{% endif %}
+  </ul>
+</nav>
+{% endif %}
+{% endblock %}

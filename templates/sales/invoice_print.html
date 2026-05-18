@@ -1,0 +1,76 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>{{ invoice.invoice_number }}</title>
+  <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/print.css' %}" />
+</head>
+<body class="invoice-print">
+  <div class="invoice-paper">
+    <header class="d-flex justify-content-between align-items-start mb-4">
+      <div>
+        {% if app_setting.show_logo_on_print and app_setting.logo %}
+          <img src="{{ app_setting.logo.url }}" alt="logo" style="max-height:60px;margin-bottom:8px;" />
+        {% endif %}
+        <h1 class="h4 mb-0">{{ app_setting.business_name }}</h1>
+        <div class="small text-muted">{{ app_setting.business_address }}</div>
+        <div class="small text-muted">{{ app_setting.business_phone }} {% if app_setting.business_email %}· {{ app_setting.business_email }}{% endif %}</div>
+      </div>
+      <div class="text-end">
+        <h2 class="h5 mb-1">INVOICE</h2>
+        <div><strong>{{ invoice.invoice_number }}</strong></div>
+        <div class="small">Date: {{ invoice.invoice_date|date:'Y-m-d' }}</div>
+        <div class="small">Status: {{ invoice.get_payment_status_display }}</div>
+      </div>
+    </header>
+    <section class="d-flex justify-content-between align-items-start mb-4">
+      <div>
+        <div class="text-muted small">Bill to</div>
+        <div class="fw-semibold">{{ invoice.customer.name }}</div>
+        <div class="small">{{ invoice.customer.phone }}</div>
+        {% if invoice.customer.address %}<div class="small">{{ invoice.customer.address }}</div>{% endif %}
+      </div>
+      <div class="text-end">
+        {% if invoice.cashier %}<div class="small">Served by: {{ invoice.cashier.get_full_name|default:invoice.cashier.username }}</div>{% endif %}
+      </div>
+    </section>
+
+    <table class="table table-sm align-middle">
+      <thead><tr><th>#</th><th>Product</th><th>Batch</th><th class="text-end">Qty</th><th class="text-end">Unit</th><th class="text-end">Disc</th><th class="text-end">Total</th></tr></thead>
+      <tbody>
+        {% for it in invoice.items.all %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ it.product_name }}<div class="small text-muted">{{ it.product.strength }}</div></td>
+            <td>{{ it.batch_number|default:'—' }}</td>
+            <td class="text-end">{{ it.quantity }}</td>
+            <td class="text-end">{{ app_setting.currency_symbol }}{{ it.unit_price|floatformat:2 }}</td>
+            <td class="text-end">{{ app_setting.currency_symbol }}{{ it.discount|floatformat:2 }}</td>
+            <td class="text-end">{{ app_setting.currency_symbol }}{{ it.total|floatformat:2 }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr><td colspan="6" class="text-end">Subtotal</td><td class="text-end">{{ app_setting.currency_symbol }}{{ invoice.subtotal|floatformat:2 }}</td></tr>
+        <tr><td colspan="6" class="text-end">Discount</td><td class="text-end">- {{ app_setting.currency_symbol }}{{ invoice.discount_amount|floatformat:2 }}</td></tr>
+        {% if invoice.tax_amount %}<tr><td colspan="6" class="text-end">Tax</td><td class="text-end">{{ app_setting.currency_symbol }}{{ invoice.tax_amount|floatformat:2 }}</td></tr>{% endif %}
+        <tr class="fw-bold"><td colspan="6" class="text-end">Total</td><td class="text-end">{{ app_setting.currency_symbol }}{{ invoice.total|floatformat:2 }}</td></tr>
+        <tr><td colspan="6" class="text-end">Paid</td><td class="text-end">{{ app_setting.currency_symbol }}{{ invoice.paid_amount|floatformat:2 }}</td></tr>
+        <tr><td colspan="6" class="text-end">Due</td><td class="text-end">{{ app_setting.currency_symbol }}{{ invoice.due_amount|floatformat:2 }}</td></tr>
+      </tfoot>
+    </table>
+
+    <footer class="mt-5 d-flex justify-content-between">
+      <div class="small text-muted">{{ app_setting.invoice_footer_note }}</div>
+      <div class="text-end">
+        <div class="border-top pt-2" style="min-width:180px;">Authorized signature</div>
+      </div>
+    </footer>
+  </div>
+  <div class="d-print-none text-center my-3">
+    <button class="btn btn-primary" onclick="window.print()">Print</button>
+    <a class="btn btn-light" href="{% url 'sales:invoice_detail' invoice.id %}">Back</a>
+  </div>
+</body>
+</html>

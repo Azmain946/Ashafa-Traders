@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+{% load static core_tags %}
+{% block title %}New order · {{ business_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+  <div>
+    <h1 class="h3 mb-1">New Order</h1>
+    <p class="text-muted mb-0">Add medicines to cart, set customer and finalize.</p>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <span class="badge bg-primary-soft text-primary-emphasis">Order draft</span>
+    <button class="btn btn-light btn-sm" id="clearCartBtn"><i class="bi bi-trash"></i> Clear cart</button>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-xl-8">
+    <div class="card soft-card mb-3">
+      <div class="card-body position-relative">
+        <label class="form-label">Search medicine</label>
+        <div class="input-group">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input type="search" id="productSearch" class="form-control form-control-lg" placeholder="Type 2+ letters to search…" autocomplete="off" />
+        </div>
+        <div id="productSuggestions" class="suggestions-dropdown" hidden></div>
+      </div>
+    </div>
+
+    <div class="card soft-card">
+      <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <h2 class="h6 mb-0">Order items</h2>
+        <span class="text-muted small" id="cartCountLabel">{{ summary.count }} item{{ summary.count|pluralize }}</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0" id="cartTable">
+          <thead>
+            <tr><th>Product</th><th>Batch</th><th class="text-end" style="width:120px;">Unit price</th><th class="text-end" style="width:110px;">Qty</th><th class="text-end" style="width:110px;">Discount</th><th class="text-end" style="width:130px;">Subtotal</th><th></th></tr>
+          </thead>
+          <tbody id="cartBody">
+            {% for line in summary.lines %}
+              {% with product=products_lookup.products|dict_get:line.product_id batch=products_lookup.batches|dict_get:line.batch_id %}
+                <tr data-batch-id="{{ line.batch_id }}">
+                  <td><strong>{{ product.name }}</strong><div class="small text-muted">{{ product.strength }}</div></td>
+                  <td>{{ batch.batch_number|default:'—' }}</td>
+                  <td class="text-end"><input type="number" step="0.01" min="0" value="{{ line.unit_price }}" class="form-control form-control-sm text-end cart-price" /></td>
+                  <td class="text-end"><input type="number" min="1" value="{{ line.quantity }}" class="form-control form-control-sm text-end cart-qty" /></td>
+                  <td class="text-end"><input type="number" step="0.01" min="0" value="{{ line.discount }}" class="form-control form-control-sm text-end cart-discount" /></td>
+                  <td class="text-end fw-semibold cart-line-total">{{ currency_symbol }}{{ line.line_total|floatformat:2 }}</td>
+                  <td><button class="btn btn-sm btn-light text-danger cart-remove"><i class="bi bi-x-lg"></i></button></td>
+                </tr>
+              {% endwith %}
+            {% empty %}
+              <tr id="cartEmptyRow"><td colspan="7" class="text-center text-muted py-4">Cart is empty. Search and add a product above.</td></tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="5" class="text-end fw-semibold">Subtotal</td>
+              <td class="text-end fw-semibold" id="cartSubtotal">{{ currency_symbol }}{{ summary.subtotal|floatformat:2 }}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-4">
+    <form method="post" action="{% url 'sales:checkout' %}" id="checkoutForm" class="card soft-card sticky-card">
+      {% csrf_token %}
+      <div class="card-header bg-transparent">
+        <h2 class="h6 mb-0">Checkout</h2>
+      </div>
+      <div class="card-body">
+        <div class="mb-3 position-relative">
+          <label class="form-label">Customer</label>
+          <input type="text" id="customerSearch" class="form-control" placeholder="Search customer by name or phone" autocomplete="off" />
+          <div id="customerSuggestions" class="suggestions-dropdown" hidden></div>
+          {{ checkout_form.customer_id }}
+        </div>
+        <div class="row g-2">
+          <div class="col-md-6"><label class="form-label">Name</label>{{ checkout_form.customer_name }}</div>
+          <div class="col-md-6"><label class="form-label">Phone</label>{{ checkout_form.customer_phone }}</div>
+        </div>
+
+        <hr />
+
+        <div class="d-flex justify-content-between"><span class="text-muted">Order ID</span><span class="fw-semibold">auto-generated</span></div>
+
+        <div class="row g-2 mt-2">
+          <div class="col-6">
+            <label class="form-label">Discount type</label>
+            {{ checkout_form.discount_type }}
+          </div>
+          <div class="col-6">
+            <label class="form-label">Discount value</label>
+            {{ checkout_form.discount_value }}
+          </div>
+        </div>
+        <div class="row g-2 mt-1">
+          <div class="col-6">
+            <label class="form-label">Paid amount</label>
+            {{ checkout_form.paid_amount }}
+          </div>
+          <div class="col-6">
+            <label class="form-label">Payment status</label>
+            {{ checkout_form.payment_status }}
+          </div>
+        </div>
+        <div class="mt-2">
+          <label class="form-label">Notes</label>
+          {{ checkout_form.notes }}
+        </div>
+
+        <hr />
+
+        <div class="totals-block">
+          <div class="d-flex justify-content-between"><span>Subtotal</span><span id="sumSubtotal">{{ currency_symbol }}{{ summary.subtotal|floatformat:2 }}</span></div>
+          <div class="d-flex justify-content-between text-muted small"><span>Discount</span><span id="sumDiscount">{{ currency_symbol }}{{ summary.discount_amount|floatformat:2 }}</span></div>
+          <div class="d-flex justify-content-between fs-5 fw-bold"><span>Total</span><span id="sumTotal">{{ currency_symbol }}{{ summary.total|floatformat:2 }}</span></div>
+          <div class="d-flex justify-content-between text-success"><span>Paid</span><span id="sumPaid">{{ currency_symbol }}{{ summary.paid|floatformat:2 }}</span></div>
+          <div class="d-flex justify-content-between text-danger fw-semibold"><span>Due</span><span id="sumDue">{{ currency_symbol }}{{ summary.due|floatformat:2 }}</span></div>
+        </div>
+      </div>
+      <div class="card-footer bg-transparent">
+        <button type="submit" class="btn btn-primary w-100 py-2"><i class="bi bi-check2-circle me-2"></i>Confirm Order</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Product modal -->
+<div class="modal fade" id="productModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Add to cart</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="d-flex align-items-start gap-3 mb-3">
+          <img id="modalImage" src="" alt="" class="rounded" style="width:96px;height:96px;object-fit:cover;background:#f1f5f9;" />
+          <div>
+            <h5 class="mb-1" id="modalName"></h5>
+            <p class="mb-0 text-muted small" id="modalSub"></p>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Batch / variant</label>
+          <select class="form-select" id="modalBatch"></select>
+        </div>
+        <div class="row g-2">
+          <div class="col-md-6"><label class="form-label">Quantity</label><input type="number" min="1" value="1" class="form-control" id="modalQty" /></div>
+          <div class="col-md-6"><label class="form-label">Unit price</label><input type="number" step="0.01" min="0" class="form-control" id="modalPrice" /></div>
+        </div>
+        <div class="mt-2 small text-muted" id="modalStockHint"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="modalSaveBtn">Save to order</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/order.js' %}"></script>
+{% endblock %}

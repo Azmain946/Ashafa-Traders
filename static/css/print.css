@@ -1,0 +1,17 @@
+body.invoice-print {
+  background: #f1f5f9;
+  font-family: "Inter", system-ui, sans-serif;
+}
+.invoice-paper {
+  background: #fff;
+  max-width: 800px;
+  margin: 24px auto;
+  padding: 32px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(15,23,42,0.08);
+}
+@media print {
+  body.invoice-print { background: #fff; }
+  .invoice-paper { box-shadow: none; margin: 0; border-radius: 0; }
+  .d-print-none { display: none !important; }
+}

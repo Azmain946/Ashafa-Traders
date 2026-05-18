@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}{{ invoice.invoice_number }} · {{ business_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+  <div>
+    <h1 class="h3 mb-1">{{ invoice.invoice_number }}</h1>
+    <p class="text-muted mb-0">{{ invoice.invoice_date|date:'Y-m-d' }} · {{ invoice.customer.name }} · {{ invoice.customer.phone }}</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{% url 'sales:invoice_print' invoice.id %}" target="_blank" class="btn btn-light"><i class="bi bi-printer"></i> Print</a>
+    <a href="{% url 'sales:invoice_list' %}" class="btn btn-light">Back</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="card soft-card"><div class="card-body"><div class="text-muted small">Subtotal</div><div class="h5 mb-0">{{ currency_symbol }}{{ invoice.subtotal|floatformat:2 }}</div></div></div></div>
+  <div class="col-md-3"><div class="card soft-card"><div class="card-body"><div class="text-muted small">Discount</div><div class="h5 mb-0">{{ currency_symbol }}{{ invoice.discount_amount|floatformat:2 }}</div></div></div></div>
+  <div class="col-md-3"><div class="card soft-card"><div class="card-body"><div class="text-muted small">Total</div><div class="h5 mb-0">{{ currency_symbol }}{{ invoice.total|floatformat:2 }}</div></div></div></div>
+  <div class="col-md-3"><div class="card soft-card"><div class="card-body"><div class="text-muted small">Status</div><div class="h5 mb-0">
+    <span class="badge rounded-pill {% if invoice.payment_status == 'paid' %}bg-success-soft text-success{% elif invoice.payment_status == 'partial' %}bg-warning-soft text-warning-emphasis{% else %}bg-danger-soft text-danger{% endif %}">
+      {{ invoice.get_payment_status_display }}
+    </span>
+  </div></div></div></div>
+</div>
+
+<div class="card soft-card">
+  <div class="card-header bg-transparent"><h2 class="h6 mb-0">Line items</h2></div>
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead>
+        <tr><th>Product</th><th>Batch</th><th class="text-end">Qty</th><th class="text-end">Unit price</th><th class="text-end">Discount</th><th class="text-end">Total</th></tr>
+      </thead>
+      <tbody>
+        {% for it in invoice.items.all %}
+          <tr>
+            <td><strong>{{ it.product_name }}</strong><div class="small text-muted">{{ it.product.strength }}</div></td>
+            <td>{{ it.batch_number|default:'—' }}</td>
+            <td class="text-end">{{ it.quantity }}</td>
+            <td class="text-end">{{ currency_symbol }}{{ it.unit_price|floatformat:2 }}</td>
+            <td class="text-end">{{ currency_symbol }}{{ it.discount|floatformat:2 }}</td>
+            <td class="text-end fw-semibold">{{ currency_symbol }}{{ it.total|floatformat:2 }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr><td colspan="5" class="text-end">Subtotal</td><td class="text-end">{{ currency_symbol }}{{ invoice.subtotal|floatformat:2 }}</td></tr>
+        <tr><td colspan="5" class="text-end">Discount</td><td class="text-end">- {{ currency_symbol }}{{ invoice.discount_amount|floatformat:2 }}</td></tr>
+        {% if invoice.tax_amount %}<tr><td colspan="5" class="text-end">Tax</td><td class="text-end">{{ currency_symbol }}{{ invoice.tax_amount|floatformat:2 }}</td></tr>{% endif %}
+        <tr class="fw-bold"><td colspan="5" class="text-end">Total</td><td class="text-end">{{ currency_symbol }}{{ invoice.total|floatformat:2 }}</td></tr>
+        <tr><td colspan="5" class="text-end text-success">Paid</td><td class="text-end text-success">{{ currency_symbol }}{{ invoice.paid_amount|floatformat:2 }}</td></tr>
+        <tr><td colspan="5" class="text-end text-danger">Due</td><td class="text-end text-danger fw-semibold">{{ currency_symbol }}{{ invoice.due_amount|floatformat:2 }}</td></tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+
+{% if invoice.notes %}
+<div class="card soft-card mt-3"><div class="card-body"><strong>Notes:</strong> {{ invoice.notes }}</div></div>
+{% endif %}
+{% endblock %}

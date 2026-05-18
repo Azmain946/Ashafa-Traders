@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block title %}Reminders · {{ business_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+  <h1 class="h3 mb-1">Reminders</h1>
+  <p class="text-muted mb-0">
+    Showing items at/below <strong>{{ low_stock_threshold }}</strong> units,
+    or expiring within <strong>{{ near_expiry_days }}</strong> days.
+    <a href="{% url 'accounts:settings' %}" class="ms-1">Change thresholds</a>.
+  </p>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card soft-card h-100">
+      <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <h2 class="h6 mb-0"><i class="bi bi-box-seam me-2"></i>Low stock</h2>
+        <span class="badge bg-warning-soft text-warning-emphasis">{{ low_stock.count }} item{{ low_stock.count|pluralize }}</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead><tr><th>Product</th><th class="text-end">Stock</th></tr></thead>
+          <tbody>
+            {% for p in low_stock %}
+              <tr class="{% if p.stock == 0 %}row-critical{% else %}row-warning{% endif %}">
+                <td>
+                  <a class="link-primary" href="{% url 'inventory:product_detail' p.id %}">{{ p.name }}</a>
+                  <div class="small text-muted">{{ p.strength }} {% if p.manufacturer %}· {{ p.manufacturer.name }}{% endif %}</div>
+                </td>
+                <td class="text-end fw-semibold">{{ p.stock|default:0 }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="2" class="text-center text-muted py-4">All medicines are well stocked.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card soft-card h-100">
+      <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <h2 class="h6 mb-0"><i class="bi bi-hourglass-split me-2"></i>Near expiry</h2>
+        <span class="badge bg-danger-soft text-danger">{{ expiring.count }} batch{{ expiring.count|pluralize:'es' }}</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead><tr><th>Product</th><th>Batch</th><th>Expiry</th><th class="text-end">Qty</th></tr></thead>
+          <tbody>
+            {% for b in expiring %}
+              <tr class="{% if b.expiry_date < today %}row-critical{% else %}row-warning{% endif %}">
+                <td><a class="link-primary" href="{% url 'inventory:product_detail' b.product.id %}">{{ b.product.name }}</a></td>
+                <td>{{ b.batch_number }}</td>
+                <td>{{ b.expiry_date|date:'Y-m-d' }}<div class="small text-muted">{{ b.days_to_expiry }} days</div></td>
+                <td class="text-end fw-semibold">{{ b.quantity }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4" class="text-center text-muted py-4">No upcoming expiries.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

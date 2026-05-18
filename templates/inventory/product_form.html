@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block title %}{% if create %}New product{% else %}Edit {{ product.name }}{% endif %} · {{ business_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+  <h1 class="h3 mb-1">{% if create %}New product{% else %}Edit product{% endif %}</h1>
+  <p class="text-muted mb-0">Maintain medicine details. Manage batches and stock on the product detail page.</p>
+</div>
+
+<div class="card soft-card" style="max-width: 960px;">
+  <div class="card-body">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label">Name *</label>{{ form.name }}</div>
+        <div class="col-md-6"><label class="form-label">Generic name</label>{{ form.generic_name }}</div>
+        <div class="col-md-3"><label class="form-label">Strength</label>{{ form.strength }}</div>
+        <div class="col-md-3"><label class="form-label">Dosage form</label>{{ form.dosage_form }}</div>
+        <div class="col-md-3"><label class="form-label">Category</label>{{ form.category }}</div>
+        <div class="col-md-3"><label class="form-label">Manufacturer</label>{{ form.manufacturer }}</div>
+        <div class="col-md-4"><label class="form-label">Barcode</label>{{ form.barcode }}</div>
+        <div class="col-md-4"><label class="form-label">SKU</label>{{ form.sku }}</div>
+        <div class="col-md-4 d-flex align-items-end gap-3">
+          <div class="form-check">{{ form.is_antibiotic }} <label class="form-check-label">Antibiotic</label></div>
+          <div class="form-check">{{ form.requires_prescription }} <label class="form-check-label">Rx</label></div>
+          <div class="form-check">{{ form.is_active }} <label class="form-check-label">Active</label></div>
+        </div>
+        <div class="col-md-12"><label class="form-label">Description</label>{{ form.description }}</div>
+        <div class="col-md-6">
+          <label class="form-label">Product image</label>
+          {{ form.image }}
+          <div class="form-text">Accepted: JPG, PNG, WebP. Auto-optimised to WebP.</div>
+        </div>
+        {% if product and product.display_image %}
+          <div class="col-md-6">
+            <label class="form-label">Current image</label>
+            <div><img src="{{ product.display_image.url }}" alt="" class="img-thumbnail" style="max-height: 160px;"></div>
+          </div>
+        {% endif %}
+      </div>
+      {% if form.errors %}<div class="alert alert-danger mt-3 py-2 small">{{ form.errors }}</div>{% endif %}
+      <div class="mt-4 d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Save product</button>
+        <a href="{% url 'inventory:product_list' %}" class="btn btn-light">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %}Antibiotic register · {{ business_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+  <h1 class="h3 mb-1">Antibiotic register</h1>
+  <p class="text-muted mb-0">Record of all antibiotic sales for compliance.</p>
+</div>
+
+<form method="get" class="card soft-card mb-4">
+  <div class="card-body row g-2 align-items-end">
+    <div class="col-md-5"><label class="form-label">Search</label>
+      <input type="search" name="q" value="{{ q }}" class="form-control" placeholder="Product, customer, phone" />
+    </div>
+    <div class="col-md-3"><label class="form-label">From</label><input type="date" name="start" value="{{ start|default:'' }}" class="form-control" /></div>
+    <div class="col-md-3"><label class="form-label">To</label><input type="date" name="end" value="{{ end|default:'' }}" class="form-control" /></div>
+    <div class="col-md-1"><button class="btn btn-primary w-100">Apply</button></div>
+  </div>
+</form>
+
+<div class="card soft-card">
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead>
+        <tr><th>Date</th><th>Customer</th><th>Product</th><th class="text-end">Qty</th><th class="text-end">Unit price</th><th class="text-end">Total</th><th>Invoice</th></tr>
+      </thead>
+      <tbody>
+        {% for e in entries %}
+          <tr>
+            <td>{{ e.sale_date|date:'Y-m-d' }}</td>
+            <td>{{ e.customer.name|default:'—' }}<div class="small text-muted">{{ e.customer.phone|default:'' }}</div></td>
+            <td>{{ e.product.name }}<div class="small text-muted">{{ e.product.strength }}</div></td>
+            <td class="text-end">{{ e.quantity }}</td>
+            <td class="text-end">{{ currency_symbol }}{{ e.unit_price|floatformat:2 }}</td>
+            <td class="text-end fw-semibold">{{ currency_symbol }}{{ e.total|floatformat:2 }}</td>
+            <td>{% if e.invoice %}<a href="{% url 'sales:invoice_detail' e.invoice.id %}">{{ e.invoice.invoice_number }}</a>{% else %}—{% endif %}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="text-center text-muted py-4">No antibiotic sales recorded.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if entries.has_other_pages %}
+<nav class="mt-4">
+  <ul class="pagination justify-content-center">
+    {% if entries.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ entries.previous_page_number }}{% if q %}&q={{ q }}{% endif %}">Previous</a></li>{% endif %}
+    <li class="page-item disabled"><span class="page-link">Page {{ entries.number }} of {{ entries.paginator.num_pages }}</span></li>
+    {% if entries.has_next %}<li class="page-item"><a class="page-link" href="?page={{ entries.next_page_number }}{% if q %}&q={{ q }}{% endif %}">Next</a></li>{% endif %}
+  </ul>
+</nav>
+{% endif %}
+{% endblock %}
