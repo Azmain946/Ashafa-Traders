@@ -28,9 +28,9 @@
             <td>{{ customer.customer_code }}</td>
             <td><strong>{{ customer.name }}</strong></td>
             <td>{{ customer.phone }}</td>
-            <td>{{ customer.total_bought }}</td>
-            <td class="text-danger">{{ customer.total_due }}</td>
-            <td class="text-success">{{ customer.total_paid }}</td>
+            <td>{{ customer.total_bought_value }}</td>
+            <td class="text-danger">{{ customer.total_due_value }}</td>
+            <td class="text-success">{{ customer.total_paid_value }}</td>
             <td class="text-end"><a href="{% url 'customer_detail' customer.pk %}" class="btn btn-sm btn-light">History</a></td>
           </tr>
         {% empty %}

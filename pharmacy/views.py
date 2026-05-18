@@ -68,7 +68,7 @@ def home(request):
         .prefetch_related("batches")
         .order_by("-updated_at")[:12]
     )
-    recent_invoices = SalesInvoice.objects.select_related("customer").only(
+    recent_invoices = SalesInvoice.objects.only(
         "invoice_number", "customer_name", "grand_total", "created_at", "payment_status"
     )[:6]
     return render(
@@ -198,16 +198,16 @@ def customers(request):
     sort = request.GET.get("sort", "name")
     query = request.GET.get("q", "").strip()
     qs = Customer.objects.annotate(
-        total_bought=Coalesce(Sum("invoices__grand_total"), Decimal("0.00"), output_field=DecimalField()),
-        total_due=Coalesce(Sum("invoices__due_amount"), Decimal("0.00"), output_field=DecimalField()),
-        total_paid=Coalesce(Sum("invoices__paid_amount"), Decimal("0.00"), output_field=DecimalField()),
+        total_bought_value=Coalesce(Sum("invoices__grand_total"), Decimal("0.00"), output_field=DecimalField()),
+        total_due_value=Coalesce(Sum("invoices__due_amount"), Decimal("0.00"), output_field=DecimalField()),
+        total_paid_value=Coalesce(Sum("invoices__paid_amount"), Decimal("0.00"), output_field=DecimalField()),
     )
     if query:
         qs = qs.filter(Q(name__icontains=query) | Q(phone__icontains=query) | Q(customer_code__icontains=query))
     sort_map = {
-        "bought": "-total_bought",
-        "due": "-total_due",
-        "paid": "-total_paid",
+        "bought": "-total_bought_value",
+        "due": "-total_due_value",
+        "paid": "-total_paid_value",
         "name": "name",
     }
     qs = qs.order_by(sort_map.get(sort, "name"))

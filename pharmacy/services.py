@@ -54,7 +54,7 @@ def cart_summary(session):
     batches = {
         batch.id: batch
         for batch in ProductBatch.objects.filter(id__in=batch_ids)
-        .select_related("product", "product__category", "product__brand")
+        .select_related("product")
         .only(
             "id",
             "batch_number",
