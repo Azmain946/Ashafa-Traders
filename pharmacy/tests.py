@@ -170,6 +170,13 @@ class PharmacyWorkflowTests(TestCase):
         create_order_update_invoice(invoice.order, self.user)
         self.assertEqual(lookup_return_invoice(invoice.order.order_number).pk, invoice.pk)
 
+        invoice.order = None
+        invoice.save(update_fields=["order"])
+        resolved = lookup_return_invoice("2099010102")
+        self.assertEqual(resolved.pk, invoice.pk)
+        self.assertEqual(resolved.order.order_number, "2099010102")
+        invoice = resolved
+
         return_tx, new_invoice = process_return(invoice, {str(invoice.items.first().id): "3"}, user=self.user)
         self.assertEqual(return_tx.total_refund, Decimal("42.00"))
         self.assertEqual(new_invoice.order_id, invoice.order_id)

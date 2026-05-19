@@ -378,17 +378,31 @@ def lookup_return_invoice(invoice_number=None, phone=None, invoice_date=None):
         lookup_value = invoice_number.strip()
         order = Order.objects.filter(order_number__iexact=lookup_value).first()
         if order:
-            return base_qs.filter(order=order).first()
+            invoice = base_qs.filter(Q(order=order) | Q(invoice_number__startswith=order.order_number)).first()
+            if invoice and invoice.order_id is None:
+                invoice.order = order
+                invoice.save(update_fields=["order", "updated_at"])
+            return invoice
         return base_qs.filter(invoice_number__iexact=lookup_value).first()
     qs = base_qs
     if phone:
+        matching_orders = Order.objects.filter(customer_phone__icontains=phone.strip())
+        order_prefixes = [order.order_number for order in matching_orders]
+        order_prefix_query = Q()
+        for prefix in order_prefixes:
+            order_prefix_query |= Q(invoice_number__startswith=prefix)
         qs = qs.filter(
             Q(customer_phone__icontains=phone.strip())
             | Q(customer__phone__icontains=phone.strip())
             | Q(order__customer_phone__icontains=phone.strip())
+            | order_prefix_query
         )
     if invoice_date:
-        qs = qs.filter(Q(invoice_date=invoice_date) | Q(order__order_date=invoice_date))
+        matching_orders = Order.objects.filter(order_date=invoice_date)
+        order_prefix_query = Q()
+        for order in matching_orders:
+            order_prefix_query |= Q(invoice_number__startswith=order.order_number)
+        qs = qs.filter(Q(invoice_date=invoice_date) | Q(order__order_date=invoice_date) | order_prefix_query)
     return qs.first()
 
 
@@ -405,14 +419,18 @@ def resolve_return_invoice(invoice):
     if invoice and invoice.item_count:
         return invoice
     if invoice and invoice.order_id:
-        return (
+        resolved = (
             SalesInvoice.objects.select_related("customer", "order")
             .prefetch_related("items__product", "items__product_batch")
             .annotate(item_count=Count("items"))
-            .filter(order=invoice.order, item_count__gt=0)
+            .filter(Q(order=invoice.order) | Q(invoice_number__startswith=invoice.order.order_number), item_count__gt=0)
             .order_by("-created_at")
             .first()
         )
+        if resolved and resolved.order_id is None:
+            resolved.order = invoice.order
+            resolved.save(update_fields=["order", "updated_at"])
+        return resolved
     return invoice
 
 
