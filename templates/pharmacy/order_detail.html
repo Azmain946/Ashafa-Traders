@@ -5,9 +5,9 @@
   <div>
     <span class="eyebrow">Order details</span>
     <h1>{{ order.order_number }}</h1>
-    <p>Update paid, partial paid, due, and related invoice records against this order ID.</p>
+    <p>Update payment status and total paid; due is calculated from the order total.</p>
   </div>
-  <a href="{% url 'invoices' %}" class="btn btn-light">Back to invoices</a>
+  <a href="{% url 'invoices' %}" class="btn btn-light">Back to orders</a>
 </div>
 
 <div class="row g-4">
@@ -36,7 +36,7 @@
     </div>
   </div>
   <div class="col-xl-5">
-    <form method="post" class="card soft-card">
+    <form method="post" class="card soft-card" id="orderPaymentForm">
       {% csrf_token %}
       <div class="card-body">
         <h2 class="h5">Payment against order ID</h2>
@@ -45,14 +45,66 @@
           <div><span>Subtotal</span><strong>{{ order.subtotal|floatformat:2 }}</strong></div>
           <div><span>Discount</span><strong>{{ order.discount_amount|floatformat:2 }}</strong></div>
           <div><span>Round off</span><strong>{{ order.round_off_amount|floatformat:2 }}</strong></div>
-          <div><span>Total</span><strong>{{ order.grand_total|floatformat:2 }}</strong></div>
+          <div><span>Total</span><strong id="orderGrandTotal">{{ order.grand_total|floatformat:2 }}</strong></div>
+          <div><span>Due (calculated)</span><strong id="orderDuePreview">{{ order.due_amount|floatformat:2 }}</strong></div>
         </div>
-        {% for field in form %}
-          <div class="mb-3">{{ field.label_tag }}{{ field }}</div>
-        {% endfor %}
+        <div class="mb-3">
+          {{ form.payment_status.label_tag }}
+          {{ form.payment_status }}
+        </div>
+        <div class="mb-3">
+          {{ form.paid_amount.label_tag }}
+          {{ form.paid_amount }}
+          <div class="form-text" id="paidAmountHelp">Editable when payment status is partially paid.</div>
+        </div>
+        <div class="mb-3">
+          {{ form.notes.label_tag }}
+          {{ form.notes }}
+        </div>
         <button class="btn btn-primary w-100">Update order</button>
       </div>
     </form>
   </div>
 </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+  (function () {
+    const grandTotal = Number("{{ order.grand_total }}");
+    const statusField = document.getElementById("id_payment_status");
+    const paidField = document.getElementById("id_paid_amount");
+    const duePreview = document.getElementById("orderDuePreview");
+
+    function money(value) {
+      return Number(value || 0).toFixed(2);
+    }
+
+    function syncPaymentFields() {
+      if (!statusField || !paidField || !duePreview) {
+        return;
+      }
+      const status = statusField.value;
+      if (status === "paid") {
+        paidField.value = money(grandTotal);
+        paidField.readOnly = true;
+        duePreview.textContent = "0.00";
+      } else if (status === "unpaid") {
+        paidField.value = "0.00";
+        paidField.readOnly = true;
+        duePreview.textContent = money(grandTotal);
+      } else {
+        paidField.readOnly = false;
+        const paid = Math.min(Number(paidField.value || 0), grandTotal);
+        if (paid !== Number(paidField.value)) {
+          paidField.value = money(paid);
+        }
+        duePreview.textContent = money(Math.max(grandTotal - paid, 0));
+      }
+    }
+
+    statusField?.addEventListener("change", syncPaymentFields);
+    paidField?.addEventListener("input", syncPaymentFields);
+    syncPaymentFields();
+  })();
+</script>
 {% endblock %}

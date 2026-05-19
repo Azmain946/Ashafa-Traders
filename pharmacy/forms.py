@@ -6,6 +6,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
+from .services import money
 from .models import (
     AppSetting,
     Customer,
@@ -226,7 +227,44 @@ class CheckoutForm(BootstrapFormMixin, forms.Form):
 class OrderPaymentForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Order
-        fields = ["paid_amount", "due_amount", "payment_status", "notes"]
+        fields = ["paid_amount", "payment_status", "notes"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["paid_amount"].label = "Total paid"
+        if self.instance.payment_status != Order.PAYMENT_PARTIAL:
+            self.fields["paid_amount"].widget.attrs["readonly"] = True
+
+    def clean(self):
+        cleaned = super().clean()
+        grand_total = money(self.instance.grand_total)
+        status = cleaned.get("payment_status")
+        if status == Order.PAYMENT_PAID:
+            cleaned["paid_amount"] = grand_total
+        elif status == Order.PAYMENT_UNPAID:
+            cleaned["paid_amount"] = Decimal("0.00")
+        else:
+            paid = money(cleaned.get("paid_amount"))
+            if paid > grand_total:
+                self.add_error("paid_amount", "Paid amount cannot exceed order total.")
+            cleaned["paid_amount"] = paid
+        return cleaned
+
+    def save(self, commit=True):
+        order = super().save(commit=False)
+        grand_total = money(order.grand_total)
+        if order.payment_status == Order.PAYMENT_PAID:
+            order.paid_amount = grand_total
+            order.due_amount = Decimal("0.00")
+        elif order.payment_status == Order.PAYMENT_UNPAID:
+            order.paid_amount = Decimal("0.00")
+            order.due_amount = grand_total
+        else:
+            order.paid_amount = money(min(order.paid_amount, grand_total))
+            order.due_amount = money(max(grand_total - order.paid_amount, Decimal("0.00")))
+        if commit:
+            order.save()
+        return order
 
 
 class ReturnLookupForm(BootstrapFormMixin, forms.Form):

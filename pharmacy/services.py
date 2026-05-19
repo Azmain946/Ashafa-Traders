@@ -6,7 +6,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q, Sum
+from django.db.models import Count, DecimalField, ExpressionWrapper, F, IntegerField, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce, TruncMonth
 from django.utils import timezone
 
@@ -577,6 +577,16 @@ def process_return(invoice, quantities, refund_method=ReturnTransaction.REFUND_A
     return transaction_obj, new_invoice
 
 
+def _order_profit_subquery():
+    return (
+        SalesInvoice.objects.filter(order_id=OuterRef("pk"))
+        .annotate(item_count=Count("items"))
+        .filter(item_count__gt=0)
+        .order_by("-created_at")
+        .values("profit_amount")[:1]
+    )
+
+
 def dashboard_metrics(range_key="this_month"):
     cache_key = f"dashboard_metrics:{range_key}"
     cached = cache.get(cache_key)
@@ -593,28 +603,46 @@ def dashboard_metrics(range_key="this_month"):
     else:
         start = today.replace(day=1)
 
-    invoices = SalesInvoice.objects.filter(invoice_date__gte=start)
-    totals = invoices.aggregate(
+    profit_subquery = _order_profit_subquery()
+    orders = Order.objects.filter(order_date__gte=start).annotate(
+        order_profit=Coalesce(
+            Subquery(profit_subquery, output_field=DecimalField(max_digits=12, decimal_places=2)),
+            Decimal("0.00"),
+            output_field=DecimalField(),
+        )
+    )
+    totals = orders.aggregate(
         total_sales=Coalesce(Sum("grand_total"), Decimal("0.00"), output_field=DecimalField()),
-        total_profit=Coalesce(Sum("profit_amount"), Decimal("0.00"), output_field=DecimalField()),
+        total_profit=Coalesce(Sum("order_profit"), Decimal("0.00"), output_field=DecimalField()),
         total_due=Coalesce(Sum("due_amount"), Decimal("0.00"), output_field=DecimalField()),
     )
     top_buying = (
-        Customer.objects.annotate(total=Coalesce(Sum("invoices__grand_total"), Decimal("0.00"), output_field=DecimalField()))
+        Customer.objects.annotate(
+            total=Coalesce(Sum("orders__grand_total"), Decimal("0.00"), output_field=DecimalField())
+        )
         .order_by("-total")[:5]
     )
     top_due = (
-        Customer.objects.annotate(total=Coalesce(Sum("invoices__due_amount"), Decimal("0.00"), output_field=DecimalField()))
+        Customer.objects.annotate(
+            total=Coalesce(Sum("orders__due_amount"), Decimal("0.00"), output_field=DecimalField())
+        )
         .filter(total__gt=0)
         .order_by("-total")[:5]
     )
     supplier_due = Supplier.objects.aggregate(
         total=Coalesce(Sum("purchase_invoices__due_amount"), Decimal("0.00"), output_field=DecimalField())
     )["total"]
+    monthly_orders = Order.objects.annotate(
+        month=TruncMonth("order_date"),
+        order_profit=Coalesce(
+            Subquery(profit_subquery, output_field=DecimalField(max_digits=12, decimal_places=2)),
+            Decimal("0.00"),
+            output_field=DecimalField(),
+        ),
+    )
     monthly = (
-        SalesInvoice.objects.annotate(month=TruncMonth("invoice_date"))
-        .values("month")
-        .annotate(total=Sum("grand_total"), profit=Sum("profit_amount"))
+        monthly_orders.values("month")
+        .annotate(total=Sum("grand_total"), profit=Sum("order_profit"))
         .order_by("month")
     )
     result = {
@@ -632,16 +660,34 @@ def dashboard_metrics(range_key="this_month"):
 def reminder_data():
     app_settings = AppSetting.load()
     today = timezone.localdate()
-    expiry_cutoff = today + timedelta(days=app_settings.near_expiry_days)
+    expiry_cutoff = today + timedelta(days=30)
+    latest_entry_units = (
+        ProductBatch.objects.filter(product_id=OuterRef("pk"), is_active=True)
+        .order_by("-created_at")
+        .annotate(entry_units=F("number_of_boxes") * F("units_per_box"))
+        .values("entry_units")[:1]
+    )
     low_stock_products = (
         Product.objects.filter(is_active=True)
-        .annotate(total=Coalesce(Sum("batches__stock_quantity"), 0))
-        .filter(total__lte=F("reorder_level"))
+        .annotate(
+            total=Coalesce(Sum("batches__stock_quantity"), 0),
+            latest_entry_units=Subquery(latest_entry_units, output_field=IntegerField()),
+            low_stock_threshold=ExpressionWrapper(
+                F("latest_entry_units") * 20 / 100,
+                output_field=IntegerField(),
+            ),
+        )
+        .filter(latest_entry_units__gt=0, total__lte=F("low_stock_threshold"))
         .select_related("category", "brand")
         .order_by("total", "name")
     )
     expiring_batches = (
-        ProductBatch.objects.filter(is_active=True, stock_quantity__gt=0, expiry_date__lte=expiry_cutoff)
+        ProductBatch.objects.filter(
+            is_active=True,
+            stock_quantity__gt=0,
+            expiry_date__gte=today,
+            expiry_date__lte=expiry_cutoff,
+        )
         .select_related("product")
         .order_by("expiry_date")
     )
