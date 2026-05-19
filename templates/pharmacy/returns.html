@@ -40,7 +40,7 @@
               <td><input type="number" name="{{ item.id }}" min="0" max="{{ item.returnable_quantity }}" step="1" value="0" class="form-control form-control-sm"></td>
             </tr>
           {% empty %}
-            <tr><td colspan="5" class="text-center text-muted py-4">No product lines found for this order.</td></tr>
+            <tr><td colspan="5" class="text-center text-muted py-4">{{ no_return_items_message|default:"No product lines found for this order." }}</td></tr>
           {% endfor %}
         </tbody>
       </table>

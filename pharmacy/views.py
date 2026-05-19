@@ -427,6 +427,7 @@ def returns(request):
     form = ReturnLookupForm(request.GET or None)
     invoice = None
     return_items = []
+    no_return_items_message = ""
     if request.GET and form.is_valid():
         invoice = lookup_return_invoice(
             form.cleaned_data.get("invoice_number"),
@@ -438,6 +439,8 @@ def returns(request):
             messages.warning(request, "No matching order found.")
         else:
             return_items = list(invoice.items.select_related("product", "product_batch").all())
+            if not return_items:
+                no_return_items_message = "No returnable product lines were found for this order."
     if request.method == "POST":
         invoice = resolve_return_invoice(get_object_or_404(SalesInvoice, pk=request.POST.get("invoice_id")))
         try:
@@ -454,7 +457,18 @@ def returns(request):
             messages.error(request, "; ".join(exc.messages))
             if invoice:
                 return_items = list(invoice.items.select_related("product", "product_batch").all())
-    return render(request, "pharmacy/returns.html", {"form": form, "invoice": invoice, "return_items": return_items})
+                if not return_items:
+                    no_return_items_message = "No returnable product lines were found for this order."
+    return render(
+        request,
+        "pharmacy/returns.html",
+        {
+            "form": form,
+            "invoice": invoice,
+            "return_items": return_items,
+            "no_return_items_message": no_return_items_message,
+        },
+    )
 
 
 @login_required
