@@ -436,7 +436,7 @@ def returns(request):
     if request.method == "POST":
         invoice = get_object_or_404(SalesInvoice, pk=request.POST.get("invoice_id"))
         try:
-            return_tx = process_return(
+            return_tx, new_invoice = process_return(
                 invoice,
                 request.POST,
                 request.POST.get("refund_method", "adjust_due"),
@@ -444,7 +444,7 @@ def returns(request):
                 request.POST.get("notes", ""),
             )
             messages.success(request, f"Return {return_tx.return_number} processed.")
-            return redirect("invoice_detail", pk=invoice.pk)
+            return redirect(f"{reverse('invoice_detail', args=[new_invoice.pk])}?print=1")
         except ValidationError as exc:
             messages.error(request, "; ".join(exc.messages))
     return render(request, "pharmacy/returns.html", {"form": form, "invoice": invoice})

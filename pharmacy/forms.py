@@ -236,8 +236,8 @@ class ReturnLookupForm(BootstrapFormMixin, forms.Form):
 
     def clean(self):
         cleaned = super().clean()
-        if not cleaned.get("invoice_number") and not cleaned.get("phone"):
-            raise ValidationError("Enter an order ID or phone number.")
+        if not cleaned.get("invoice_number") and not cleaned.get("phone") and not cleaned.get("invoice_date"):
+            raise ValidationError("Enter an order ID, order date, or phone number.")
         return cleaned
 
 

@@ -8,7 +8,7 @@
     <p>Find the original order, choose items, and restock returned quantities.</p>
   </div>
 </div>
-<form method="get" class="card soft-card mb-4">
+<form method="get" class="card soft-card mb-4" id="returnLookupForm">
   <div class="card-body">
     <div class="row g-3 align-items-end">
       <div class="col-md-4"><label class="form-label" for="{{ form.invoice_number.id_for_label }}">Order ID</label>{{ form.invoice_number }}</div>
@@ -37,8 +37,10 @@
               <td>{{ item.batch_number }}</td>
               <td>{{ item.quantity }}</td>
               <td>{{ item.returned_quantity }}</td>
-              <td><input type="number" name="{{ item.id }}" min="0" max="{{ item.returnable_quantity }}" value="0" class="form-control form-control-sm"></td>
+              <td><input type="number" name="{{ item.id }}" min="0" max="{{ item.returnable_quantity }}" step="1" value="0" class="form-control form-control-sm"></td>
             </tr>
+          {% empty %}
+            <tr><td colspan="5" class="text-center text-muted py-4">No product lines found for this order.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -61,4 +63,24 @@
     </div>
   </form>
 {% endif %}
+{% endblock %}
+{% block extra_js %}
+<script>
+  (function () {
+    const form = document.getElementById("returnLookupForm");
+    const orderInput = document.getElementById("id_invoice_number");
+    let timer;
+    if (form && orderInput) {
+      orderInput.addEventListener("input", function () {
+        window.clearTimeout(timer);
+        const value = orderInput.value.trim();
+        if (/^\d{10,}$/.test(value)) {
+          timer = window.setTimeout(function () {
+            form.submit();
+          }, 350);
+        }
+      });
+    }
+  })();
+</script>
 {% endblock %}

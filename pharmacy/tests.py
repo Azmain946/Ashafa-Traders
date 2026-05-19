@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import Order, Product, ProductBatch, ProductCategory, SalesInvoice, StockMovement
-from .services import add_or_update_cart_item, finalize_checkout
+from .services import add_or_update_cart_item, finalize_checkout, lookup_return_invoice, process_return
 
 
 class SessionLike(dict):
@@ -145,3 +145,31 @@ class PharmacyWorkflowTests(TestCase):
         self.assertIsNone(product.category)
         self.assertTrue(batch.batch_number)
         self.assertIsNone(batch.mfg_date)
+
+    def test_return_lookup_and_processing_creates_printable_invoice(self):
+        session = SessionLike()
+        session["pending_order_number"] = "2099010102"
+        add_or_update_cart_item(session, self.batch.id, quantity=7)
+        invoice = finalize_checkout(
+            session,
+            {
+                "customer_name": "Return Customer",
+                "customer_phone": "01710000001",
+                "discount_percent": Decimal("0.00"),
+                "discount_amount": Decimal("0.00"),
+                "paid_amount": Decimal("98.00"),
+                "notes": "",
+            },
+            self.user,
+        )
+
+        self.assertEqual(lookup_return_invoice(invoice.order.order_number).pk, invoice.pk)
+        self.assertEqual(lookup_return_invoice(phone="01710000001").pk, invoice.pk)
+        self.assertEqual(lookup_return_invoice(invoice_date=invoice.order.order_date).pk, invoice.pk)
+
+        return_tx, new_invoice = process_return(invoice, {str(invoice.items.first().id): "3"}, user=self.user)
+        self.assertEqual(return_tx.total_refund, Decimal("42.00"))
+        self.assertEqual(new_invoice.order_id, invoice.order_id)
+        self.assertEqual(new_invoice.items.first().quantity, 4)
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.stock_quantity, 6)
