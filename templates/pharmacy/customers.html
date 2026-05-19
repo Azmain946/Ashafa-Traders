@@ -11,6 +11,7 @@
 <form class="filter-bar" method="get">
   <input class="form-control" name="q" value="{{ query }}" placeholder="Search customer ID, name or phone">
   <select class="form-select" name="sort">
+    <option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest first</option>
     <option value="name" {% if sort == 'name' %}selected{% endif %}>Name</option>
     <option value="bought" {% if sort == 'bought' %}selected{% endif %}>Total bought</option>
     <option value="due" {% if sort == 'due' %}selected{% endif %}>Total due</option>

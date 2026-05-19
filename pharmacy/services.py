@@ -112,9 +112,11 @@ def cart_summary(session):
         quantity = int(raw.get("quantity", 1))
         unit_price = unit_money(raw.get("unit_price", batch.tp_price))
         discount_percent = money(raw.get("discount_percent", 0))
+        add_percent = money(raw.get("add_percent", 0))
         gross_line_total = money(unit_price * quantity)
         discount = money(gross_line_total * discount_percent / Decimal("100.00"))
-        line_total = max(money(gross_line_total - discount), Decimal("0.00"))
+        add_amount = money(gross_line_total * add_percent / Decimal("100.00"))
+        line_total = max(money(gross_line_total - discount + add_amount), Decimal("0.00"))
         subtotal += line_total
         items.append(
             {
@@ -123,7 +125,9 @@ def cart_summary(session):
                 "quantity": quantity,
                 "unit_price": unit_price,
                 "discount_percent": discount_percent,
+                "add_percent": add_percent,
                 "discount_amount": discount,
+                "add_amount": add_amount,
                 "line_total": line_total,
             }
         )
@@ -137,7 +141,15 @@ def cart_summary(session):
     }
 
 
-def add_or_update_cart_item(session, batch_id, quantity=1, unit_price=None, discount_percent=0, replace=False):
+def add_or_update_cart_item(
+    session,
+    batch_id,
+    quantity=1,
+    unit_price=None,
+    discount_percent=0,
+    add_percent=0,
+    replace=False,
+):
     batch = ProductBatch.objects.select_related("product").get(pk=batch_id, is_active=True)
     if batch.stock_quantity <= 0:
         raise ValidationError("This batch has no available stock.")
@@ -148,6 +160,7 @@ def add_or_update_cart_item(session, batch_id, quantity=1, unit_price=None, disc
         raise ValidationError("Quantity must be at least 1.")
     unit_price = unit_money(unit_price or batch.tp_price)
     discount_percent = money(discount_percent)
+    add_percent = money(add_percent)
     cart = current_cart(session)
     key = str(batch_id)
     existing_qty = int(cart.get(key, {}).get("quantity", 0))
@@ -158,6 +171,7 @@ def add_or_update_cart_item(session, batch_id, quantity=1, unit_price=None, disc
         "quantity": new_qty,
         "unit_price": str(unit_price),
         "discount_percent": str(discount_percent),
+        "add_percent": str(add_percent),
     }
     session["cart"] = cart
     session.modified = True
@@ -212,9 +226,9 @@ def finalize_checkout(session, checkout_data, user=None):
             raise ValidationError(f"{locked_batch.product.display_name} batch {locked_batch.batch_number} is expired.")
         if locked_batch.stock_quantity < item["quantity"]:
             raise ValidationError(f"Not enough stock for {locked_batch.product.display_name}.")
-        line_total = money(item["unit_price"] * item["quantity"] - item["discount_amount"])
+        line_total = money(item["line_total"])
         subtotal += line_total
-        profit += money((item["unit_price"] - locked_batch.buy_price) * item["quantity"] - item["discount_amount"])
+        profit += money(line_total - locked_batch.buy_price * item["quantity"])
         prepared_items.append((locked_batch, item, line_total))
 
     discount_percent = money(checkout_data.get("discount_percent"))

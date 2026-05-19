@@ -157,6 +157,7 @@
     document.getElementById("quickProductMeta").textContent = `${batch.generic_name || "Medicine"} · Choose strength, batch, and TP/MRP`;
     document.getElementById("quickPriceType").value = "tp";
     document.getElementById("quickDiscountPercent").value = "0";
+    document.getElementById("quickAddPercent").value = "0";
     document.querySelectorAll("[data-price-type]").forEach((button) => {
       button.classList.toggle("btn-primary", button.dataset.priceType === "tp");
       button.classList.toggle("btn-outline-primary", button.dataset.priceType !== "tp");
@@ -179,6 +180,7 @@
       }
       document.getElementById("quickQuantity").value = editingCartItem.quantity || 1;
       document.getElementById("quickDiscountPercent").value = editingCartItem.discount_percent || "0";
+      document.getElementById("quickAddPercent").value = editingCartItem.add_percent || "0";
     }
     bootstrap.Modal.getOrCreateInstance(modalEl).show();
   }
@@ -207,15 +209,16 @@
       return;
     }
     if (!cart.items.length) {
-      body.innerHTML = '<tr class="empty-cart"><td colspan="7" class="text-center text-muted py-4">Search and add a medicine to begin.</td></tr>';
+      body.innerHTML = '<tr class="empty-cart"><td colspan="8" class="text-center text-muted py-4">Search and add a medicine to begin.</td></tr>';
     } else {
       body.innerHTML = cart.items.map((item) => `
-        <tr class="cart-edit-row" data-cart-edit="1" data-product-id="${item.product_id}" data-batch-id="${item.batch_id}" data-quantity="${item.quantity}" data-discount-percent="${item.discount_percent}" data-unit-price="${item.unit_price}">
+        <tr class="cart-edit-row" data-cart-edit="1" data-product-id="${item.product_id}" data-batch-id="${item.batch_id}" data-quantity="${item.quantity}" data-discount-percent="${item.discount_percent}" data-add-percent="${item.add_percent || 0}" data-unit-price="${item.unit_price}">
           <td>${item.name}</td>
           <td>${item.batch_number}</td>
           <td>${item.quantity}</td>
           <td>${money(item.unit_price, 3)}</td>
           <td>${money(item.discount_percent, 2)}</td>
+          <td>${money(item.add_percent || 0, 2)}</td>
           <td>${money(item.line_total, 2)}</td>
           <td><button class="btn btn-sm btn-outline-danger" data-remove-cart="${item.batch_id}"><i class="bi bi-trash"></i></button></td>
         </tr>
@@ -280,6 +283,7 @@
           quantity: document.getElementById("quickQuantity").value,
           price_type: document.getElementById("quickPriceType").value,
           discount_percent: document.getElementById("quickDiscountPercent").value,
+          add_percent: document.getElementById("quickAddPercent").value,
           replace: Boolean(editingCartItem),
         });
         renderCart(cart);
@@ -320,6 +324,7 @@
       }, {
         quantity: cartRow.dataset.quantity,
         discount_percent: cartRow.dataset.discountPercent,
+        add_percent: cartRow.dataset.addPercent,
         unit_price: cartRow.dataset.unitPrice,
       });
     }
@@ -455,4 +460,156 @@
   drawDashboardChart();
 
   updateCheckoutPreview();
+
+  function isProductImageField(element) {
+    return element && element.name === "image" && element.type === "file";
+  }
+
+  function isEnterNavField(element) {
+    if (!element || element.disabled) {
+      return false;
+    }
+    if (isProductImageField(element)) {
+      return false;
+    }
+    const tag = element.tagName;
+    if (tag === "TEXTAREA") {
+      return false;
+    }
+    if (tag !== "INPUT" && tag !== "SELECT") {
+      return false;
+    }
+    const type = (element.type || "").toLowerCase();
+    if (["hidden", "checkbox", "radio", "button", "submit", "file", "search"].includes(type)) {
+      return false;
+    }
+    if (element.readOnly) {
+      return false;
+    }
+    if (element.closest("[data-skip-enter-nav]")) {
+      return false;
+    }
+    return true;
+  }
+
+  function enterNavScope(element) {
+    const modal = element.closest(".modal.show");
+    if (modal) {
+      return modal;
+    }
+    return element.closest("form") || document;
+  }
+
+  function enterNavFields(scope) {
+    return Array.from(scope.querySelectorAll("input, select, textarea")).filter((field) => {
+      if (!isEnterNavField(field)) {
+        return false;
+      }
+      return field.offsetParent !== null || field === document.activeElement;
+    });
+  }
+
+  function activateSubmit(scope) {
+    const form = scope.closest ? scope.closest("form") : null;
+    if (form) {
+      const submit = form.querySelector('button[type="submit"], input[type="submit"]');
+      if (submit) {
+        submit.click();
+        return;
+      }
+      const primary = form.querySelector("button.btn-primary:not([data-bs-dismiss])");
+      if (primary) {
+        primary.click();
+        return;
+      }
+    }
+    if (scope.classList?.contains("modal")) {
+      document.getElementById("quickSaveProduct")?.click();
+      return;
+    }
+    const fallback = scope.querySelector('button[type="submit"], button.btn-primary:not([data-bs-dismiss])');
+    fallback?.click();
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
+      return;
+    }
+    const target = event.target;
+    if (!isEnterNavField(target)) {
+      return;
+    }
+    const scope = enterNavScope(target);
+    const fields = enterNavFields(scope);
+    const index = fields.indexOf(target);
+    if (index === -1) {
+      return;
+    }
+    event.preventDefault();
+    if (index < fields.length - 1) {
+      fields[index + 1].focus();
+      if (typeof fields[index + 1].select === "function") {
+        fields[index + 1].select();
+      }
+      return;
+    }
+    activateSubmit(scope);
+  });
+
+  function shouldClearOnFocus(element) {
+    if (!element || element.disabled || element.readOnly) {
+      return false;
+    }
+    if (isProductImageField(element)) {
+      return false;
+    }
+    const tag = element.tagName;
+    if (tag === "SELECT") {
+      return false;
+    }
+    if (tag !== "INPUT" && tag !== "TEXTAREA") {
+      return false;
+    }
+    const type = (element.type || "").toLowerCase();
+    if (["hidden", "checkbox", "radio", "button", "submit", "file"].includes(type)) {
+      return false;
+    }
+    if (element.closest("[data-no-clear-on-focus]")) {
+      return false;
+    }
+    return true;
+  }
+
+  document.addEventListener(
+    "focusin",
+    (event) => {
+      const target = event.target;
+      if (!shouldClearOnFocus(target)) {
+        return;
+      }
+      if (target.dataset.clearedOnce === "1") {
+        return;
+      }
+      target.dataset.previousValue = target.value;
+      target.value = "";
+      target.dataset.clearedOnce = "1";
+    },
+    true,
+  );
+
+  document.addEventListener(
+    "focusout",
+    (event) => {
+      const target = event.target;
+      if (!shouldClearOnFocus(target) || target.dataset.clearedOnce !== "1") {
+        return;
+      }
+      if (target.value === "" && target.dataset.previousValue !== undefined) {
+        target.value = target.dataset.previousValue;
+      }
+      delete target.dataset.previousValue;
+      delete target.dataset.clearedOnce;
+    },
+    true,
+  );
 })();

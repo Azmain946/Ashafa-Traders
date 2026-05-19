@@ -316,7 +316,7 @@ def product_detail(request, pk):
 
 @login_required
 def customers(request):
-    sort = request.GET.get("sort", "name")
+    sort = request.GET.get("sort", "newest")
     query = request.GET.get("q", "").strip()
     qs = Customer.objects.annotate(
         total_bought_value=Coalesce(Sum("orders__grand_total"), Decimal("0.00"), output_field=DecimalField()),
@@ -326,12 +326,13 @@ def customers(request):
     if query:
         qs = qs.filter(Q(name__icontains=query) | Q(phone__icontains=query) | Q(customer_code__icontains=query))
     sort_map = {
+        "newest": "-created_at",
         "bought": "-total_bought_value",
         "due": "-total_due_value",
         "paid": "-total_paid_value",
         "name": "name",
     }
-    qs = qs.order_by(sort_map.get(sort, "name"))
+    qs = qs.order_by(sort_map.get(sort, "-created_at"))
     return render(request, "pharmacy/customers.html", {"page_obj": paginate(request, qs), "sort": sort, "query": query})
 
 
@@ -613,6 +614,7 @@ def api_cart_add(request):
             payload.get("quantity", 1),
             unit_price,
             payload.get("discount_percent", 0),
+            payload.get("add_percent", 0),
             replace=payload.get("replace", False),
         )
         return JsonResponse(cart_payload(summary))
@@ -670,7 +672,9 @@ def cart_payload(summary):
                 "quantity": item["quantity"],
                 "unit_price": str(item["unit_price"]),
                 "discount_percent": str(item["discount_percent"]),
+                "add_percent": str(item["add_percent"]),
                 "discount_amount": str(item["discount_amount"]),
+                "add_amount": str(item["add_amount"]),
                 "line_total": str(item["line_total"]),
                 "stock_quantity": batch.stock_quantity,
                 "image": image,
