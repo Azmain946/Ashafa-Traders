@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}{{ order.order_number }} | Ashafa Pharmacy ERP{% endblock %}
+{% block content %}
+<div class="page-title">
+  <div>
+    <span class="eyebrow">Order details</span>
+    <h1>{{ order.order_number }}</h1>
+    <p>Update paid, partial paid, due, and related invoice records against this order ID.</p>
+  </div>
+  <a href="{% url 'invoices' %}" class="btn btn-light">Back to invoices</a>
+</div>
+
+<div class="row g-4">
+  <div class="col-xl-7">
+    <div class="card table-card">
+      <div class="card-header bg-white"><strong>Linked invoices</strong></div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead><tr><th>Invoice</th><th>Date</th><th>Total</th><th>Paid</th><th>Due</th><th></th></tr></thead>
+          <tbody>
+            {% for invoice in order.invoices.all %}
+              <tr>
+                <td>{{ invoice.invoice_number }}</td>
+                <td>{{ invoice.invoice_date }}</td>
+                <td>{{ invoice.grand_total|floatformat:2 }}</td>
+                <td>{{ invoice.paid_amount|floatformat:2 }}</td>
+                <td>{{ invoice.due_amount|floatformat:2 }}</td>
+                <td class="text-end"><a class="btn btn-sm btn-light" href="{% url 'invoice_detail' invoice.pk %}">Open</a></td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="6" class="text-center text-muted py-4">No invoices linked.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-5">
+    <form method="post" class="card soft-card">
+      {% csrf_token %}
+      <div class="card-body">
+        <h2 class="h5">Payment against order ID</h2>
+        <div class="totals-panel mb-3">
+          <div><span>Subtotal</span><strong>{{ order.subtotal|floatformat:2 }}</strong></div>
+          <div><span>Discount</span><strong>{{ order.discount_amount|floatformat:2 }}</strong></div>
+          <div><span>Round off</span><strong>{{ order.round_off_amount|floatformat:2 }}</strong></div>
+          <div><span>Total</span><strong>{{ order.grand_total|floatformat:2 }}</strong></div>
+        </div>
+        {% for field in form %}
+          <div class="mb-3">{{ field.label_tag }}{{ field }}</div>
+        {% endfor %}
+        <button class="btn btn-primary w-100">Update order</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

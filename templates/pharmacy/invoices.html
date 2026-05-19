@@ -15,20 +15,21 @@
 <div class="card table-card">
   <div class="table-responsive">
     <table class="table align-middle mb-0">
-      <thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th>Total</th><th>Paid</th><th>Due</th><th></th></tr></thead>
+      <thead><tr><th>Order ID</th><th>Invoice</th><th>Date</th><th>Customer</th><th>Total</th><th>Paid</th><th>Due</th><th></th></tr></thead>
       <tbody>
         {% for invoice in page_obj %}
           <tr>
+            <td>{% if invoice.order %}<a href="{% url 'order_detail' invoice.order.pk %}">{{ invoice.order.order_number }}</a>{% else %}-{% endif %}</td>
             <td><a href="{% url 'invoice_detail' invoice.pk %}">{{ invoice.invoice_number }}</a></td>
             <td>{{ invoice.invoice_date }}</td>
             <td>{{ invoice.customer_name }}<br><small class="text-muted">{{ invoice.customer_phone }}</small></td>
-            <td>{{ invoice.grand_total }}</td>
-            <td>{{ invoice.paid_amount }}</td>
-            <td class="text-danger">{{ invoice.due_amount }}</td>
+            <td>{{ invoice.grand_total|floatformat:2 }}</td>
+            <td>{{ invoice.paid_amount|floatformat:2 }}</td>
+            <td class="text-danger">{{ invoice.due_amount|floatformat:2 }}</td>
             <td class="text-end"><a class="btn btn-sm btn-light" href="{% url 'invoice_detail' invoice.pk %}">Open</a></td>
           </tr>
         {% empty %}
-          <tr><td colspan="7" class="text-center text-muted py-4">No invoices found.</td></tr>
+          <tr><td colspan="8" class="text-center text-muted py-4">No invoices found.</td></tr>
         {% endfor %}
       </tbody>
     </table>

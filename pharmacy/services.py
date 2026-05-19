@@ -1,6 +1,6 @@
 from collections import defaultdict
 from datetime import timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_FLOOR, ROUND_HALF_UP
 
 from django.conf import settings
 from django.core.cache import cache
@@ -15,6 +15,8 @@ from .models import (
     AppSetting,
     Customer,
     InvoiceSequence,
+    Order,
+    OrderSequence,
     Product,
     ProductBatch,
     ReminderItem,
@@ -28,10 +30,19 @@ from .models import (
 
 
 MONEY = Decimal("0.01")
+UNIT_MONEY = Decimal("0.00000001")
 
 
 def money(value):
     return Decimal(value or 0).quantize(MONEY, rounding=ROUND_HALF_UP)
+
+
+def unit_money(value):
+    return Decimal(value or 0).quantize(UNIT_MONEY, rounding=ROUND_HALF_UP)
+
+
+def rounded_total(value):
+    return Decimal(value or 0).to_integral_value(rounding=ROUND_FLOOR).quantize(MONEY)
 
 
 def generate_invoice_number():
@@ -44,12 +55,22 @@ def generate_invoice_number():
         return f"INV-{today:%Y%m%d}-{sequence.last_number:04d}"
 
 
+def generate_order_number():
+    today = timezone.localdate()
+    with transaction.atomic():
+        sequence, _ = OrderSequence.objects.select_for_update().get_or_create(date=today)
+        sequence.last_number = F("last_number") + 1
+        sequence.save(update_fields=["last_number"])
+        sequence.refresh_from_db(fields=["last_number"])
+        return f"ORD-{today:%Y%m%d}-{sequence.last_number:04d}"
+
+
 def reserve_order_number(session):
-    pending = session.get("pending_invoice_number")
-    if pending and not SalesInvoice.objects.filter(invoice_number=pending).exists():
+    pending = session.get("pending_order_number")
+    if pending and not Order.objects.filter(order_number=pending).exists():
         return pending
-    pending = generate_invoice_number()
-    session["pending_invoice_number"] = pending
+    pending = generate_order_number()
+    session["pending_order_number"] = pending
     session.modified = True
     return pending
 
@@ -86,9 +107,11 @@ def cart_summary(session):
         if not batch:
             continue
         quantity = int(raw.get("quantity", 1))
-        unit_price = money(raw.get("unit_price", batch.tp_price))
-        discount = money(raw.get("discount_amount", 0))
-        line_total = max(money(unit_price * quantity - discount), Decimal("0.00"))
+        unit_price = unit_money(raw.get("unit_price", batch.tp_price))
+        discount_percent = money(raw.get("discount_percent", 0))
+        gross_line_total = money(unit_price * quantity)
+        discount = money(gross_line_total * discount_percent / Decimal("100.00"))
+        line_total = max(money(gross_line_total - discount), Decimal("0.00"))
         subtotal += line_total
         items.append(
             {
@@ -96,14 +119,22 @@ def cart_summary(session):
                 "product": batch.product,
                 "quantity": quantity,
                 "unit_price": unit_price,
+                "discount_percent": discount_percent,
                 "discount_amount": discount,
                 "line_total": line_total,
             }
         )
-    return {"items": items, "subtotal": money(subtotal), "count": sum(item["quantity"] for item in items)}
+    rounded = rounded_total(subtotal)
+    return {
+        "items": items,
+        "subtotal": money(subtotal),
+        "round_off_amount": money(subtotal - rounded),
+        "rounded_total": rounded,
+        "count": sum(item["quantity"] for item in items),
+    }
 
 
-def add_or_update_cart_item(session, batch_id, quantity=1, unit_price=None, discount_amount=0, replace=False):
+def add_or_update_cart_item(session, batch_id, quantity=1, unit_price=None, discount_percent=0, replace=False):
     batch = ProductBatch.objects.select_related("product").get(pk=batch_id, is_active=True)
     if batch.stock_quantity <= 0:
         raise ValidationError("This batch has no available stock.")
@@ -112,8 +143,8 @@ def add_or_update_cart_item(session, batch_id, quantity=1, unit_price=None, disc
     quantity = int(quantity)
     if quantity < 1:
         raise ValidationError("Quantity must be at least 1.")
-    unit_price = money(unit_price or batch.tp_price)
-    discount_amount = money(discount_amount)
+    unit_price = unit_money(unit_price or batch.tp_price)
+    discount_percent = money(discount_percent)
     cart = current_cart(session)
     key = str(batch_id)
     existing_qty = int(cart.get(key, {}).get("quantity", 0))
@@ -123,7 +154,7 @@ def add_or_update_cart_item(session, batch_id, quantity=1, unit_price=None, disc
     cart[key] = {
         "quantity": new_qty,
         "unit_price": str(unit_price),
-        "discount_amount": str(discount_amount),
+        "discount_percent": str(discount_percent),
     }
     session["cart"] = cart
     session.modified = True
@@ -140,7 +171,7 @@ def remove_cart_item(session, batch_id):
 
 def clear_cart(session):
     session["cart"] = {}
-    session.pop("pending_invoice_number", None)
+    session.pop("pending_order_number", None)
     session.modified = True
 
 
@@ -187,7 +218,9 @@ def finalize_checkout(session, checkout_data, user=None):
     fixed_discount = money(checkout_data.get("discount_amount"))
     percentage_discount = money(subtotal * discount_percent / Decimal("100.00"))
     total_discount = min(subtotal, percentage_discount + fixed_discount)
-    grand_total = money(subtotal - total_discount)
+    unrounded_total = money(subtotal - total_discount)
+    grand_total = rounded_total(unrounded_total)
+    round_off_amount = money(unrounded_total - grand_total)
     paid_amount = min(money(checkout_data.get("paid_amount")), grand_total)
     due_amount = money(grand_total - paid_amount)
     if due_amount == 0:
@@ -198,18 +231,35 @@ def finalize_checkout(session, checkout_data, user=None):
         payment_status = SalesInvoice.PAYMENT_PARTIAL
 
     customer = _resolve_customer(checkout_data.get("customer_name"), checkout_data.get("customer_phone"))
-    invoice_number = session.pop("pending_invoice_number", None)
-    if not invoice_number or SalesInvoice.objects.filter(invoice_number=invoice_number).exists():
-        invoice_number = generate_invoice_number()
+    order_number = session.pop("pending_order_number", None)
+    if not order_number or Order.objects.filter(order_number=order_number).exists():
+        order_number = generate_order_number()
     session.modified = True
+    order = Order.objects.create(
+        order_number=order_number,
+        customer=customer,
+        customer_name=(checkout_data.get("customer_name") or getattr(customer, "name", "") or "Walk-in Customer"),
+        customer_phone=(checkout_data.get("customer_phone") or getattr(customer, "phone", "")),
+        subtotal=money(subtotal),
+        discount_amount=money(total_discount),
+        round_off_amount=round_off_amount,
+        grand_total=grand_total,
+        paid_amount=paid_amount,
+        due_amount=due_amount,
+        payment_status=payment_status,
+        notes=checkout_data.get("notes", ""),
+        created_by=user if getattr(user, "is_authenticated", False) else None,
+    )
     invoice = SalesInvoice.objects.create(
-        invoice_number=invoice_number,
+        order=order,
+        invoice_number=generate_invoice_number(),
         customer=customer,
         customer_name=(checkout_data.get("customer_name") or getattr(customer, "name", "") or "Walk-in Customer"),
         customer_phone=(checkout_data.get("customer_phone") or getattr(customer, "phone", "")),
         subtotal=money(subtotal),
         discount_percent=discount_percent,
         discount_amount=money(total_discount),
+        round_off_amount=round_off_amount,
         grand_total=grand_total,
         paid_amount=paid_amount,
         due_amount=due_amount,
@@ -231,6 +281,7 @@ def finalize_checkout(session, checkout_data, user=None):
             batch_number=locked_batch.batch_number,
             quantity=item["quantity"],
             unit_price=item["unit_price"],
+            discount_percent=item["discount_percent"],
             discount_amount=item["discount_amount"],
             line_total=line_total,
             buy_price=locked_batch.buy_price,

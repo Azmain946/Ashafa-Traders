@@ -30,19 +30,20 @@
       </div>
       <div class="table-responsive">
         <table class="table align-middle mb-0">
-          <thead><tr><th>Medicine</th><th>Batch</th><th>Qty</th><th>Price</th><th>Subtotal</th><th></th></tr></thead>
+          <thead><tr><th>Medicine</th><th>Batch</th><th>Qty</th><th>Price</th><th>Discount %</th><th>Subtotal</th><th></th></tr></thead>
           <tbody id="cartTableBody">
             {% for item in cart.items %}
               <tr data-batch-id="{{ item.batch.id }}">
                 <td>{{ item.product.display_name }}</td>
                 <td>{{ item.batch.batch_number }}</td>
                 <td>{{ item.quantity }}</td>
-                <td>{{ item.unit_price }}</td>
-                <td>{{ item.line_total }}</td>
+                <td>{{ item.unit_price|floatformat:3 }}</td>
+                <td>{{ item.discount_percent|floatformat:2 }}</td>
+                <td>{{ item.line_total|floatformat:2 }}</td>
                 <td><button class="btn btn-sm btn-outline-danger" data-remove-cart="{{ item.batch.id }}"><i class="bi bi-trash"></i></button></td>
               </tr>
             {% empty %}
-              <tr class="empty-cart"><td colspan="6" class="text-center text-muted py-4">Search and add a medicine to begin.</td></tr>
+              <tr class="empty-cart"><td colspan="7" class="text-center text-muted py-4">Search and add a medicine to begin.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -64,9 +65,11 @@
           <div class="col-12">{{ checkout_form.notes.label_tag }}{{ checkout_form.notes }}</div>
         </div>
         <div class="totals-panel mt-4">
-          <div><span>Subtotal</span><strong id="cartSubtotal">{{ cart.subtotal }}</strong></div>
+          <div><span>Subtotal</span><strong id="cartSubtotal">{{ cart.subtotal|floatformat:2 }}</strong></div>
           <div><span>Discount</span><strong id="checkoutDiscountPreview">0.00</strong></div>
-          <div><span>Due</span><strong id="checkoutDuePreview">{{ cart.subtotal }}</strong></div>
+          <div><span>Round off</span><strong id="checkoutRoundOffPreview">{{ cart.round_off_amount|floatformat:2 }}</strong></div>
+          <div><span>Rounded total</span><strong id="checkoutRoundedTotal">{{ cart.rounded_total|floatformat:2 }}</strong></div>
+          <div><span>Due</span><strong id="checkoutDuePreview">{{ cart.rounded_total|floatformat:2 }}</strong></div>
         </div>
         <div class="paid-toggle">
           <label class="form-check">

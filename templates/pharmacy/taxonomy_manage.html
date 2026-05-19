@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Categories & Brands | Ashafa Pharmacy ERP{% endblock %}
+{% block content %}
+<div class="page-title">
+  <div>
+    <span class="eyebrow">Catalog</span>
+    <h1>Categories and brands</h1>
+    <p>Add, edit, or delete category and brand names.</p>
+  </div>
+  <a href="{% url 'products' %}" class="btn btn-light">Back to products</a>
+</div>
+
+<div class="row g-4">
+  <div class="col-xl-6">
+    <form method="post" class="card soft-card mb-4">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="add_category">
+      <div class="card-body">
+        <h2 class="h5">Add category</h2>
+        <div class="row g-3">
+          {% for field in category_form %}
+            <div class="col-md-6">{{ field.label_tag }}{{ field }}</div>
+          {% endfor %}
+        </div>
+        <button class="btn btn-primary mt-3">Add category</button>
+      </div>
+    </form>
+    <div class="card table-card">
+      <div class="card-header bg-white"><strong>Existing categories</strong></div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead><tr><th>Name</th><th>Description</th><th>Color</th><th></th></tr></thead>
+          <tbody>
+            {% for category in categories %}
+              <tr>
+                <form method="post">
+                  {% csrf_token %}
+                  <input type="hidden" name="category_id" value="{{ category.id }}">
+                  <td><input class="form-control form-control-sm" name="category_{{ category.id }}-name" value="{{ category.name }}"></td>
+                  <td><input class="form-control form-control-sm" name="category_{{ category.id }}-description" value="{{ category.description }}"></td>
+                  <td><input class="form-control form-control-sm" name="category_{{ category.id }}-color" value="{{ category.color }}"></td>
+                  <td class="text-end">
+                    <button class="btn btn-sm btn-outline-primary" name="action" value="update_category">Save</button>
+                    <button class="btn btn-sm btn-outline-danger" name="action" value="delete_category">Delete</button>
+                  </td>
+                </form>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4" class="text-center text-muted py-4">No categories.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-6">
+    <form method="post" class="card soft-card mb-4">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="add_brand">
+      <div class="card-body">
+        <h2 class="h5">Add brand</h2>
+        <div class="row g-3">
+          {% for field in brand_form %}
+            <div class="col-md-6">{{ field.label_tag }}{{ field }}</div>
+          {% endfor %}
+        </div>
+        <button class="btn btn-primary mt-3">Add brand</button>
+      </div>
+    </form>
+    <div class="card table-card">
+      <div class="card-header bg-white"><strong>Existing brands</strong></div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead><tr><th>Name</th><th>Contact</th><th>Phone</th><th>Email</th><th></th></tr></thead>
+          <tbody>
+            {% for brand in brands %}
+              <tr>
+                <form method="post">
+                  {% csrf_token %}
+                  <input type="hidden" name="brand_id" value="{{ brand.id }}">
+                  <td><input class="form-control form-control-sm" name="brand_{{ brand.id }}-name" value="{{ brand.name }}"></td>
+                  <td><input class="form-control form-control-sm" name="brand_{{ brand.id }}-contact_person" value="{{ brand.contact_person }}"></td>
+                  <td><input class="form-control form-control-sm" name="brand_{{ brand.id }}-phone" value="{{ brand.phone }}"></td>
+                  <td><input class="form-control form-control-sm" name="brand_{{ brand.id }}-email" value="{{ brand.email }}"></td>
+                  <td class="text-end">
+                    <button class="btn btn-sm btn-outline-primary" name="action" value="update_brand">Save</button>
+                    <button class="btn btn-sm btn-outline-danger" name="action" value="delete_brand">Delete</button>
+                  </td>
+                </form>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="text-center text-muted py-4">No brands.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

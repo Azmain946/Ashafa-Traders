@@ -206,9 +206,9 @@ class ProductBatch(TimeStampedModel):
     barcode = models.CharField(max_length=80, unique=True, blank=True, null=True, db_index=True)
     mfg_date = models.DateField("Manufacturing date", null=True, blank=True)
     expiry_date = models.DateField(db_index=True)
-    buy_price = models.DecimalField(max_digits=12, decimal_places=2)
-    tp_price = models.DecimalField("TP price", max_digits=12, decimal_places=2)
-    mrp = models.DecimalField("MRP", max_digits=12, decimal_places=2)
+    buy_price = models.DecimalField(max_digits=18, decimal_places=8)
+    tp_price = models.DecimalField("TP price", max_digits=18, decimal_places=8)
+    mrp = models.DecimalField("MRP", max_digits=18, decimal_places=8)
     buy_price_per_box = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     tp_price_per_box = models.DecimalField("TP price per box", max_digits=12, decimal_places=2, default=0)
     mrp_per_box = models.DecimalField("MRP per box", max_digits=12, decimal_places=2, default=0)
@@ -336,7 +336,7 @@ class PurchaseInvoiceItem(TimeStampedModel):
     purchase_invoice = models.ForeignKey(PurchaseInvoice, on_delete=models.CASCADE, related_name="items")
     product_batch = models.ForeignKey(ProductBatch, on_delete=models.PROTECT, related_name="purchase_items")
     quantity = models.PositiveIntegerField()
-    buy_price = models.DecimalField(max_digits=12, decimal_places=2)
+    buy_price = models.DecimalField(max_digits=18, decimal_places=8)
     line_total = models.DecimalField(max_digits=12, decimal_places=2)
 
     def __str__(self):
@@ -354,6 +354,66 @@ class InvoiceSequence(models.Model):
         return f"{self.date}: {self.last_number}"
 
 
+class OrderSequence(models.Model):
+    date = models.DateField(unique=True)
+    last_number = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["-date"]
+
+    def __str__(self):
+        return f"{self.date}: {self.last_number}"
+
+
+class Order(TimeStampedModel):
+    PAYMENT_UNPAID = "unpaid"
+    PAYMENT_PARTIAL = "partial"
+    PAYMENT_PAID = "paid"
+    PAYMENT_STATUS_CHOICES = [
+        (PAYMENT_UNPAID, "Unpaid"),
+        (PAYMENT_PARTIAL, "Partially paid"),
+        (PAYMENT_PAID, "Fully paid"),
+    ]
+
+    order_number = models.CharField(max_length=40, unique=True, db_index=True)
+    customer = models.ForeignKey(
+        Customer,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="orders",
+    )
+    customer_name = models.CharField(max_length=160, blank=True)
+    customer_phone = models.CharField(max_length=40, blank=True, db_index=True)
+    order_date = models.DateField(default=timezone.localdate, db_index=True)
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    round_off_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    grand_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    due_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default=PAYMENT_UNPAID)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="orders",
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["order_number"]),
+            models.Index(fields=["order_date"]),
+            models.Index(fields=["customer_phone"]),
+        ]
+
+    def __str__(self):
+        return self.order_number
+
+
 class SalesInvoice(TimeStampedModel):
     PAYMENT_UNPAID = "unpaid"
     PAYMENT_PARTIAL = "partial"
@@ -364,6 +424,7 @@ class SalesInvoice(TimeStampedModel):
         (PAYMENT_PAID, "Fully paid"),
     ]
 
+    order = models.ForeignKey(Order, on_delete=models.PROTECT, null=True, blank=True, related_name="invoices")
     invoice_number = models.CharField(max_length=40, unique=True, db_index=True)
     customer = models.ForeignKey(
         Customer,
@@ -378,6 +439,7 @@ class SalesInvoice(TimeStampedModel):
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     discount_percent = models.DecimalField(max_digits=6, decimal_places=2, default=0)
     discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    round_off_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     grand_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     due_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -411,10 +473,11 @@ class SalesInvoiceItem(TimeStampedModel):
     product_name = models.CharField(max_length=240)
     batch_number = models.CharField(max_length=100)
     quantity = models.PositiveIntegerField()
-    unit_price = models.DecimalField(max_digits=12, decimal_places=2)
+    unit_price = models.DecimalField(max_digits=18, decimal_places=8)
+    discount_percent = models.DecimalField(max_digits=6, decimal_places=2, default=0)
     discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     line_total = models.DecimalField(max_digits=12, decimal_places=2)
-    buy_price = models.DecimalField(max_digits=12, decimal_places=2)
+    buy_price = models.DecimalField(max_digits=18, decimal_places=8)
     returned_quantity = models.PositiveIntegerField(default=0)
 
     class Meta:

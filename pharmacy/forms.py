@@ -9,6 +9,7 @@ from django.utils import timezone
 from .models import (
     AppSetting,
     Customer,
+    Order,
     Product,
     ProductBatch,
     ProductBrand,
@@ -54,9 +55,9 @@ class BoxPriceMixin:
         boxes = self.cleaned_data["number_of_boxes"]
         units = self.cleaned_data["units_per_box"]
         batch.stock_quantity = boxes * units
-        batch.buy_price = (self.cleaned_data["buy_price_per_box"] / units).quantize(Decimal("0.01"))
-        batch.tp_price = (self.cleaned_data["tp_price_per_box"] / units).quantize(Decimal("0.01"))
-        batch.mrp = (self.cleaned_data["mrp_per_box"] / units).quantize(Decimal("0.01"))
+        batch.buy_price = (self.cleaned_data["buy_price_per_box"] / units).quantize(Decimal("0.00000001"))
+        batch.tp_price = (self.cleaned_data["tp_price_per_box"] / units).quantize(Decimal("0.00000001"))
+        batch.mrp = (self.cleaned_data["mrp_per_box"] / units).quantize(Decimal("0.00000001"))
         return batch
 
 
@@ -145,9 +146,9 @@ class ProductBatchForm(BootstrapFormMixin, forms.ModelForm):
         boxes = self.cleaned_data["number_of_boxes"]
         units = self.cleaned_data["units_per_box"]
         batch.stock_quantity = boxes * units
-        batch.buy_price = (self.cleaned_data["buy_price_per_box"] / units).quantize(Decimal("0.01"))
-        batch.tp_price = (self.cleaned_data["tp_price_per_box"] / units).quantize(Decimal("0.01"))
-        batch.mrp = (self.cleaned_data["mrp_per_box"] / units).quantize(Decimal("0.01"))
+        batch.buy_price = (self.cleaned_data["buy_price_per_box"] / units).quantize(Decimal("0.00000001"))
+        batch.tp_price = (self.cleaned_data["tp_price_per_box"] / units).quantize(Decimal("0.00000001"))
+        batch.mrp = (self.cleaned_data["mrp_per_box"] / units).quantize(Decimal("0.00000001"))
         if commit:
             batch.save()
         return batch
@@ -209,6 +210,12 @@ class CheckoutForm(BootstrapFormMixin, forms.Form):
         if phone and len("".join(ch for ch in phone if ch.isdigit())) < 7:
             self.add_error("customer_phone", "Enter a valid phone number.")
         return cleaned
+
+
+class OrderPaymentForm(BootstrapFormMixin, forms.ModelForm):
+    class Meta:
+        model = Order
+        fields = ["paid_amount", "due_amount", "payment_status", "notes"]
 
 
 class ReturnLookupForm(BootstrapFormMixin, forms.Form):

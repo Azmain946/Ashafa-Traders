@@ -6,6 +6,8 @@ from .models import (
     AppSetting,
     Customer,
     InvoiceSequence,
+    Order,
+    OrderSequence,
     Product,
     ProductBatch,
     ProductBrand,
@@ -66,10 +68,17 @@ class SalesInvoiceItemInline(admin.TabularInline):
 
 @admin.register(SalesInvoice)
 class SalesInvoiceAdmin(admin.ModelAdmin):
-    list_display = ("invoice_number", "invoice_date", "customer_name", "grand_total", "paid_amount", "due_amount", "payment_status")
+    list_display = ("invoice_number", "order", "invoice_date", "customer_name", "grand_total", "paid_amount", "due_amount", "payment_status")
     list_filter = ("payment_status", "invoice_date")
     search_fields = ("invoice_number", "customer_name", "customer_phone")
     inlines = [SalesInvoiceItemInline]
+
+
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    list_display = ("order_number", "order_date", "customer_name", "grand_total", "paid_amount", "due_amount", "payment_status")
+    list_filter = ("payment_status", "order_date")
+    search_fields = ("order_number", "customer_name", "customer_phone", "invoices__invoice_number")
 
 
 class PurchaseInvoiceItemInline(admin.TabularInline):
@@ -125,3 +134,4 @@ admin.site.register(AppSetting)
 admin.site.register(UserProfile)
 admin.site.register(ActionLog)
 admin.site.register(InvoiceSequence)
+admin.site.register(OrderSequence)

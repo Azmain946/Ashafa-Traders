@@ -19,7 +19,7 @@
         <strong>{{ batch.product.display_name }}</strong>
         <span>Batch: {{ batch.batch_number }}</span>
         <div class="barcode-code">{{ batch.barcode }}</div>
-        <small>EXP {{ batch.expiry_date }} | TP {{ batch.tp_price }} | MRP {{ batch.mrp }}</small>
+        <small>EXP {{ batch.expiry_date }} | TP {{ batch.tp_price|floatformat:3 }} | MRP {{ batch.mrp|floatformat:3 }}</small>
       </section>
     {% endfor %}
   </main>

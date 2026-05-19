@@ -26,27 +26,29 @@
       </div>
     </div>
 
-    <div class="card soft-card mt-4">
-      <div class="card-body">
-        <h3 class="h5">Edit product</h3>
-        <form method="post" enctype="multipart/form-data">
-          {% csrf_token %}
-          <input type="hidden" name="_action" value="update_product">
-          <div class="row g-2">
-            {% for field in product_form %}
-              <div class="col-12">
-                {% if field.field.widget.input_type == 'checkbox' %}
-                  <label class="form-check">{{ field }} <span class="form-check-label">{{ field.label }}</span></label>
-                {% else %}
-                  {{ field.label_tag }}{{ field }}
-                {% endif %}
-              </div>
-            {% endfor %}
-          </div>
-          <button class="btn btn-primary w-100 mt-3">Update product</button>
-        </form>
+    {% if can_manage_products %}
+      <div class="card soft-card mt-4">
+        <div class="card-body">
+          <h3 class="h5">Edit product</h3>
+          <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <input type="hidden" name="_action" value="update_product">
+            <div class="row g-2">
+              {% for field in product_form %}
+                <div class="col-12">
+                  {% if field.field.widget.input_type == 'checkbox' %}
+                    <label class="form-check">{{ field }} <span class="form-check-label">{{ field.label }}</span></label>
+                  {% else %}
+                    {{ field.label_tag }}{{ field }}
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+            <button class="btn btn-primary w-100 mt-3">Update product</button>
+          </form>
+        </div>
       </div>
-    </div>
+    {% endif %}
   </div>
 
   <div class="col-xl-8">
@@ -66,9 +68,9 @@
                 <td>{{ batch.expiry_date }}</td>
                 <td>{{ batch.number_of_boxes }}</td>
                 <td>{{ batch.units_per_box }}</td>
-                <td>{{ batch.buy_price_per_box }}</td>
-                <td>{{ batch.tp_price_per_box }}</td>
-                <td>{{ batch.mrp_per_box }}</td>
+                <td>{{ batch.buy_price_per_box|floatformat:3 }}</td>
+                <td>{{ batch.tp_price_per_box|floatformat:3 }}</td>
+                <td>{{ batch.mrp_per_box|floatformat:3 }}</td>
                 <td><span class="stock-pill">{{ batch.stock_quantity }}</span></td>
                 <td>{{ batch.shelf_number|default:"-" }}</td>
                 <td>
@@ -96,27 +98,29 @@
       </div>
     </div>
 
-    <div class="card soft-card mt-4">
-      <div class="card-body">
-        <h3 class="h5">Add entry</h3>
-        <form method="post">
-          {% csrf_token %}
-          <input type="hidden" name="_action" value="add_batch">
-          <div class="row g-3">
-            {% for field in batch_form %}
-              <div class="col-md-4">
-                {% if field.field.widget.input_type == 'checkbox' %}
-                  <label class="form-check mt-4">{{ field }} <span class="form-check-label">{{ field.label }}</span></label>
-                {% else %}
-                  {{ field.label_tag }}{{ field }}
-                {% endif %}
-              </div>
-            {% endfor %}
-          </div>
-          <button class="btn btn-primary mt-3">Save entry</button>
-        </form>
+    {% if can_manage_products %}
+      <div class="card soft-card mt-4">
+        <div class="card-body">
+          <h3 class="h5">Add entry</h3>
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="_action" value="add_batch">
+            <div class="row g-3">
+              {% for field in batch_form %}
+                <div class="col-md-4">
+                  {% if field.field.widget.input_type == 'checkbox' %}
+                    <label class="form-check mt-4">{{ field }} <span class="form-check-label">{{ field.label }}</span></label>
+                  {% else %}
+                    {{ field.label_tag }}{{ field }}
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+            <button class="btn btn-primary mt-3">Save entry</button>
+          </form>
+        </div>
       </div>
-    </div>
+    {% endif %}
 
     <div class="card table-card mt-4">
       <div class="card-header bg-white"><strong>Recent stock movements</strong></div>

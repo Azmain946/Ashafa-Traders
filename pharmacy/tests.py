@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Product, ProductBatch, ProductCategory, SalesInvoice, StockMovement
+from .models import Order, Product, ProductBatch, ProductCategory, SalesInvoice, StockMovement
 from .services import add_or_update_cart_item, finalize_checkout
 
 
@@ -38,8 +38,8 @@ class PharmacyWorkflowTests(TestCase):
 
     def test_checkout_creates_invoice_and_decrements_stock(self):
         session = SessionLike()
-        session["pending_invoice_number"] = "INV-20990101-0001"
-        add_or_update_cart_item(session, self.batch.id, quantity=2)
+        session["pending_order_number"] = "ORD-20990101-0001"
+        add_or_update_cart_item(session, self.batch.id, quantity=2, discount_percent=Decimal("10.00"))
 
         invoice = finalize_checkout(
             session,
@@ -57,10 +57,15 @@ class PharmacyWorkflowTests(TestCase):
         self.batch.refresh_from_db()
         self.assertEqual(self.batch.stock_quantity, 8)
         self.assertEqual(invoice.items.count(), 1)
-        self.assertEqual(invoice.invoice_number, "INV-20990101-0001")
+        self.assertEqual(invoice.order.order_number, "ORD-20990101-0001")
+        self.assertEqual(invoice.items.first().discount_percent, Decimal("10.00"))
+        self.assertEqual(invoice.subtotal, Decimal("25.20"))
+        self.assertEqual(invoice.round_off_amount, Decimal("0.20"))
+        self.assertEqual(invoice.grand_total, Decimal("25.00"))
         self.assertEqual(session.get("cart"), {})
-        self.assertNotIn("pending_invoice_number", session)
+        self.assertNotIn("pending_order_number", session)
         self.assertEqual(invoice.payment_status, SalesInvoice.PAYMENT_PARTIAL)
+        self.assertEqual(invoice.order.payment_status, Order.PAYMENT_PARTIAL)
         self.assertEqual(StockMovement.objects.filter(sales_invoice=invoice).count(), 1)
         self.assertEqual(invoice.antibiotic_entries.count(), 1)
 

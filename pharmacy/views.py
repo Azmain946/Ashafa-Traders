@@ -20,6 +20,7 @@ from .forms import (
     CategoryForm,
     CheckoutForm,
     CustomerForm,
+    OrderPaymentForm,
     ProductBatchForm,
     ProductEntryForm,
     ProductForm,
@@ -34,6 +35,7 @@ from .models import (
     AntibioticRegisterEntry,
     AppSetting,
     Customer,
+    Order,
     Product,
     ProductBatch,
     ProductBrand,
@@ -61,6 +63,15 @@ from .services import (
 def paginate(request, queryset, per_page=20):
     paginator = Paginator(queryset, per_page)
     return paginator.get_page(request.GET.get("page"))
+
+
+def can_manage_products(user):
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if user.is_superuser:
+        return True
+    profile = getattr(user, "profile", None)
+    return getattr(profile, "role", "") in {"admin", "manager"}
 
 
 @login_required
@@ -151,11 +162,13 @@ def products(request):
             "query": query,
             "categories": categories,
             "selected_category": selected_category,
+            "can_manage_products": can_manage_products(request.user),
         },
     )
 
 
 @login_required
+@user_passes_test(can_manage_products)
 def product_create(request):
     if request.method == "POST":
         form = ProductEntryForm(request.POST, request.FILES)
@@ -170,6 +183,63 @@ def product_create(request):
     else:
         form = ProductEntryForm()
     return render(request, "pharmacy/product_form.html", {"form": form, "title": "Add product"})
+
+
+@login_required
+@user_passes_test(can_manage_products)
+def taxonomy_manage(request):
+    category_form = CategoryForm(prefix="category")
+    brand_form = BrandForm(prefix="brand")
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "add_category":
+            category_form = CategoryForm(request.POST, prefix="category")
+            if category_form.is_valid():
+                category_form.save()
+                messages.success(request, "Category added.")
+                return redirect("taxonomy_manage")
+        elif action == "update_category":
+            category = get_object_or_404(ProductCategory, pk=request.POST.get("category_id"))
+            form = CategoryForm(request.POST, instance=category, prefix=f"category_{category.pk}")
+            if form.is_valid():
+                form.save()
+                messages.success(request, "Category updated.")
+                return redirect("taxonomy_manage")
+        elif action == "delete_category":
+            category = get_object_or_404(ProductCategory, pk=request.POST.get("category_id"))
+            category.delete()
+            messages.success(request, "Category deleted.")
+            return redirect("taxonomy_manage")
+        elif action == "add_brand":
+            brand_form = BrandForm(request.POST, prefix="brand")
+            if brand_form.is_valid():
+                brand_form.save()
+                messages.success(request, "Brand added.")
+                return redirect("taxonomy_manage")
+        elif action == "update_brand":
+            brand = get_object_or_404(ProductBrand, pk=request.POST.get("brand_id"))
+            form = BrandForm(request.POST, instance=brand, prefix=f"brand_{brand.pk}")
+            if form.is_valid():
+                form.save()
+                messages.success(request, "Brand updated.")
+                return redirect("taxonomy_manage")
+        elif action == "delete_brand":
+            brand = get_object_or_404(ProductBrand, pk=request.POST.get("brand_id"))
+            brand.delete()
+            messages.success(request, "Brand deleted.")
+            return redirect("taxonomy_manage")
+    categories = ProductCategory.objects.order_by("name")
+    brands = ProductBrand.objects.order_by("name")
+    return render(
+        request,
+        "pharmacy/taxonomy_manage.html",
+        {
+            "category_form": category_form,
+            "brand_form": brand_form,
+            "categories": categories,
+            "brands": brands,
+        },
+    )
 
 
 @login_required
@@ -201,13 +271,13 @@ def product_detail(request, pk):
     adjustment_form = StockAdjustmentForm()
     if request.method == "POST":
         action = request.POST.get("_action")
-        if action == "update_product":
+        if action == "update_product" and can_manage_products(request.user):
             product_form = ProductForm(request.POST, request.FILES, instance=product)
             if product_form.is_valid():
                 product_form.save()
                 messages.success(request, "Product details updated.")
                 return redirect("product_detail", pk=product.pk)
-        elif action == "add_batch":
+        elif action == "add_batch" and can_manage_products(request.user):
             batch_form = ProductBatchForm(request.POST)
             if batch_form.is_valid():
                 batch = batch_form.save(commit=False)
@@ -237,6 +307,7 @@ def product_detail(request, pk):
             "adjustment_form": adjustment_form,
             "batches": batches,
             "movements": movements,
+            "can_manage_products": can_manage_products(request.user),
         },
     )
 
@@ -315,10 +386,11 @@ def supplier_detail(request, pk):
 @login_required
 def invoices(request):
     query = request.GET.get("q", "").strip()
-    qs = SalesInvoice.objects.select_related("customer").order_by("-created_at")
+    qs = SalesInvoice.objects.select_related("customer", "order").order_by("-created_at")
     if query:
         qs = qs.filter(
             Q(invoice_number__icontains=query)
+            | Q(order__order_number__icontains=query)
             | Q(customer_name__icontains=query)
             | Q(customer_phone__icontains=query)
         )
@@ -326,9 +398,22 @@ def invoices(request):
 
 
 @login_required
+def order_detail(request, pk):
+    order = get_object_or_404(Order.objects.prefetch_related("invoices"), pk=pk)
+    form = OrderPaymentForm(instance=order)
+    if request.method == "POST":
+        form = OrderPaymentForm(request.POST, instance=order)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Order payment details updated.")
+            return redirect("order_detail", pk=order.pk)
+    return render(request, "pharmacy/order_detail.html", {"order": order, "form": form})
+
+
+@login_required
 def invoice_detail(request, pk):
     invoice = get_object_or_404(
-        SalesInvoice.objects.select_related("customer").prefetch_related("items__product", "items__product_batch"),
+        SalesInvoice.objects.select_related("customer", "order").prefetch_related("items__product", "items__product_batch"),
         pk=pk,
     )
     app_settings = AppSetting.load()
@@ -504,7 +589,7 @@ def api_cart_add(request):
             payload.get("batch_id"),
             payload.get("quantity", 1),
             unit_price,
-            0,
+            payload.get("discount_percent", 0),
             replace=payload.get("replace", False),
         )
         return JsonResponse(cart_payload(summary))
@@ -561,12 +646,19 @@ def cart_payload(summary):
                 "batch_number": batch.batch_number,
                 "quantity": item["quantity"],
                 "unit_price": str(item["unit_price"]),
+                "discount_percent": str(item["discount_percent"]),
                 "discount_amount": str(item["discount_amount"]),
                 "line_total": str(item["line_total"]),
                 "stock_quantity": batch.stock_quantity,
                 "image": image,
             }
         )
-    return {"items": items, "subtotal": str(summary["subtotal"]), "count": summary["count"]}
+    return {
+        "items": items,
+        "subtotal": str(summary["subtotal"]),
+        "round_off_amount": str(summary["round_off_amount"]),
+        "rounded_total": str(summary["rounded_total"]),
+        "count": summary["count"],
+    }
 
 # Create your views here.

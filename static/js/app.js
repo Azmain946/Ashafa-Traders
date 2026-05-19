@@ -11,9 +11,9 @@
     };
   }
 
-  function money(value) {
+  function money(value, places = 2) {
     const number = Number(value || 0);
-    return number.toFixed(2);
+    return number.toFixed(places);
   }
 
   function productImageMarkup(src) {
@@ -32,7 +32,7 @@
           <small>${batch.generic_name || batch.brand || "Medicine"} · ${batch.strength || "Default"} · Batch ${batch.batch_number} · Stock ${batch.stock_quantity}</small>
         </div>
         <div class="text-end">
-          <strong>${batch.tp_price}</strong>
+          <strong>${money(batch.tp_price, 3)}</strong>
           <small class="d-block">TP</small>
         </div>
       </div>
@@ -127,8 +127,8 @@
     document.getElementById("quickBatchId").value = selectedBatch.batch_id;
     document.getElementById("quickQuantity").value = 1;
     document.getElementById("quickQuantity").max = selectedBatch.stock_quantity;
-    document.getElementById("quickUnitPrice").textContent = money(selectedPriceType === "mrp" ? selectedBatch.mrp : selectedBatch.tp_price);
-    document.getElementById("quickStockInfo").textContent = `${selectedBatch.stock_quantity} units available in batch ${selectedBatch.batch_number}. TP ${money(selectedBatch.tp_price)} / MRP ${money(selectedBatch.mrp)}.`;
+    document.getElementById("quickUnitPrice").textContent = money(selectedPriceType === "mrp" ? selectedBatch.mrp : selectedBatch.tp_price, 3);
+    document.getElementById("quickStockInfo").textContent = `${selectedBatch.stock_quantity} units available in batch ${selectedBatch.batch_number}. TP ${money(selectedBatch.tp_price, 3)} / MRP ${money(selectedBatch.mrp, 3)}.`;
   }
 
   async function openQuickModal(batch) {
@@ -153,6 +153,7 @@
     document.getElementById("quickProductName").textContent = batch.name;
     document.getElementById("quickProductMeta").textContent = `${batch.generic_name || "Medicine"} · Choose strength, batch, and TP/MRP`;
     document.getElementById("quickPriceType").value = "tp";
+    document.getElementById("quickDiscountPercent").value = "0";
     document.querySelectorAll("[data-price-type]").forEach((button) => {
       button.classList.toggle("btn-primary", button.dataset.priceType === "tp");
       button.classList.toggle("btn-outline-primary", button.dataset.priceType !== "tp");
@@ -190,15 +191,16 @@
       return;
     }
     if (!cart.items.length) {
-      body.innerHTML = '<tr class="empty-cart"><td colspan="6" class="text-center text-muted py-4">Search and add a medicine to begin.</td></tr>';
+      body.innerHTML = '<tr class="empty-cart"><td colspan="7" class="text-center text-muted py-4">Search and add a medicine to begin.</td></tr>';
     } else {
       body.innerHTML = cart.items.map((item) => `
         <tr data-batch-id="${item.batch_id}">
           <td>${item.name}</td>
           <td>${item.batch_number}</td>
           <td>${item.quantity}</td>
-          <td>${item.unit_price}</td>
-          <td>${item.line_total}</td>
+          <td>${money(item.unit_price, 3)}</td>
+          <td>${money(item.discount_percent, 2)}</td>
+          <td>${money(item.line_total, 2)}</td>
           <td><button class="btn btn-sm btn-outline-danger" data-remove-cart="${item.batch_id}"><i class="bi bi-trash"></i></button></td>
         </tr>
       `).join("");
@@ -207,7 +209,15 @@
       count.textContent = `${cart.count} items`;
     }
     if (subtotal) {
-      subtotal.textContent = money(cart.subtotal);
+      subtotal.textContent = money(cart.subtotal, 2);
+    }
+    const roundOff = document.getElementById("checkoutRoundOffPreview");
+    const roundedTotal = document.getElementById("checkoutRoundedTotal");
+    if (roundOff) {
+      roundOff.textContent = money(cart.round_off_amount, 2);
+    }
+    if (roundedTotal) {
+      roundedTotal.textContent = money(cart.rounded_total, 2);
     }
     updateCheckoutPreview();
   }
@@ -218,14 +228,25 @@
     const fixed = Number(document.querySelector('[name="discount_amount"]')?.value || 0);
     const paid = Number(document.querySelector('[name="paid_amount"]')?.value || 0);
     const discount = Math.min(subtotal, subtotal * percent / 100 + fixed);
-    const due = Math.max(subtotal - discount - paid, 0);
+    const unroundedTotal = Math.max(subtotal - discount, 0);
+    const roundedTotal = Math.floor(unroundedTotal);
+    const roundOff = unroundedTotal - roundedTotal;
+    const due = Math.max(roundedTotal - paid, 0);
     const discountEl = document.getElementById("checkoutDiscountPreview");
+    const roundOffEl = document.getElementById("checkoutRoundOffPreview");
+    const roundedTotalEl = document.getElementById("checkoutRoundedTotal");
     const dueEl = document.getElementById("checkoutDuePreview");
     if (discountEl) {
       discountEl.textContent = money(discount);
     }
     if (dueEl) {
       dueEl.textContent = money(due);
+    }
+    if (roundOffEl) {
+      roundOffEl.textContent = money(roundOff);
+    }
+    if (roundedTotalEl) {
+      roundedTotalEl.textContent = money(roundedTotal);
     }
   }
 
@@ -242,6 +263,7 @@
           batch_id: document.getElementById("quickBatchId").value,
           quantity: document.getElementById("quickQuantity").value,
           price_type: document.getElementById("quickPriceType").value,
+          discount_percent: document.getElementById("quickDiscountPercent").value,
         });
         renderCart(cart);
         bootstrap.Modal.getOrCreateInstance(document.getElementById("quickProductModal")).hide();
@@ -306,7 +328,7 @@
         const percent = Number(document.querySelector('[name="discount_percent"]')?.value || 0);
         const fixed = Number(document.querySelector('[name="discount_amount"]')?.value || 0);
         const discount = Math.min(subtotal, subtotal * percent / 100 + fixed);
-        paidAmount.value = money(Math.max(subtotal - discount, 0));
+        paidAmount.value = money(Math.floor(Math.max(subtotal - discount, 0)));
         if (partiallyPaid) {
           partiallyPaid.checked = false;
         }
