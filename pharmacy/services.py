@@ -367,7 +367,7 @@ def adjust_stock(batch, action, quantity, note="", user=None):
 
 
 def lookup_return_invoice(invoice_number=None, phone=None, invoice_date=None):
-    qs = (
+    base_qs = (
         SalesInvoice.objects.select_related("customer", "order")
         .prefetch_related("items__product", "items__product_batch")
         .annotate(item_count=Count("items"))
@@ -375,7 +375,12 @@ def lookup_return_invoice(invoice_number=None, phone=None, invoice_date=None):
         .order_by("-created_at")
     )
     if invoice_number:
-        qs = qs.filter(Q(invoice_number__iexact=invoice_number.strip()) | Q(order__order_number__iexact=invoice_number.strip()))
+        lookup_value = invoice_number.strip()
+        order = Order.objects.filter(order_number__iexact=lookup_value).first()
+        if order:
+            return base_qs.filter(order=order).first()
+        return base_qs.filter(invoice_number__iexact=lookup_value).first()
+    qs = base_qs
     if phone:
         qs = qs.filter(
             Q(customer_phone__icontains=phone.strip())
@@ -385,6 +390,30 @@ def lookup_return_invoice(invoice_number=None, phone=None, invoice_date=None):
     if invoice_date:
         qs = qs.filter(Q(invoice_date=invoice_date) | Q(order__order_date=invoice_date))
     return qs.first()
+
+
+def resolve_return_invoice(invoice):
+    if not invoice:
+        return None
+    invoice = (
+        SalesInvoice.objects.select_related("customer", "order")
+        .prefetch_related("items__product", "items__product_batch")
+        .annotate(item_count=Count("items"))
+        .filter(pk=invoice.pk)
+        .first()
+    )
+    if invoice and invoice.item_count:
+        return invoice
+    if invoice and invoice.order_id:
+        return (
+            SalesInvoice.objects.select_related("customer", "order")
+            .prefetch_related("items__product", "items__product_batch")
+            .annotate(item_count=Count("items"))
+            .filter(order=invoice.order, item_count__gt=0)
+            .order_by("-created_at")
+            .first()
+        )
+    return invoice
 
 
 @transaction.atomic

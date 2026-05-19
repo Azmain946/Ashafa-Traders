@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import Order, Product, ProductBatch, ProductCategory, SalesInvoice, StockMovement
-from .services import add_or_update_cart_item, finalize_checkout, lookup_return_invoice, process_return
+from .services import add_or_update_cart_item, create_order_update_invoice, finalize_checkout, lookup_return_invoice, process_return
 
 
 class SessionLike(dict):
@@ -166,6 +166,9 @@ class PharmacyWorkflowTests(TestCase):
         self.assertEqual(lookup_return_invoice(invoice.order.order_number).pk, invoice.pk)
         self.assertEqual(lookup_return_invoice(phone="01710000001").pk, invoice.pk)
         self.assertEqual(lookup_return_invoice(invoice_date=invoice.order.order_date).pk, invoice.pk)
+
+        create_order_update_invoice(invoice.order, self.user)
+        self.assertEqual(lookup_return_invoice(invoice.order.order_number).pk, invoice.pk)
 
         return_tx, new_invoice = process_return(invoice, {str(invoice.items.first().id): "3"}, user=self.user)
         self.assertEqual(return_tx.total_refund, Decimal("42.00"))

@@ -31,7 +31,7 @@
       <table class="table align-middle mb-0">
         <thead><tr><th>Product</th><th>Batch</th><th>Sold</th><th>Returned</th><th>Return now</th></tr></thead>
         <tbody>
-          {% for item in invoice.items.all %}
+          {% for item in return_items %}
             <tr>
               <td>{{ item.product_name }}</td>
               <td>{{ item.batch_number }}</td>

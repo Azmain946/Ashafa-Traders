@@ -57,6 +57,7 @@ from .services import (
     remove_cart_item,
     reminder_data,
     reserve_order_number,
+    resolve_return_invoice,
     search_products,
 )
 
@@ -425,16 +426,20 @@ def invoice_detail(request, pk):
 def returns(request):
     form = ReturnLookupForm(request.GET or None)
     invoice = None
+    return_items = []
     if request.GET and form.is_valid():
         invoice = lookup_return_invoice(
             form.cleaned_data.get("invoice_number"),
             form.cleaned_data.get("phone"),
             form.cleaned_data.get("invoice_date"),
         )
+        invoice = resolve_return_invoice(invoice)
         if not invoice:
             messages.warning(request, "No matching order found.")
+        else:
+            return_items = list(invoice.items.select_related("product", "product_batch").all())
     if request.method == "POST":
-        invoice = get_object_or_404(SalesInvoice, pk=request.POST.get("invoice_id"))
+        invoice = resolve_return_invoice(get_object_or_404(SalesInvoice, pk=request.POST.get("invoice_id")))
         try:
             return_tx, new_invoice = process_return(
                 invoice,
@@ -447,7 +452,9 @@ def returns(request):
             return redirect(f"{reverse('invoice_detail', args=[new_invoice.pk])}?print=1")
         except ValidationError as exc:
             messages.error(request, "; ".join(exc.messages))
-    return render(request, "pharmacy/returns.html", {"form": form, "invoice": invoice})
+            if invoice:
+                return_items = list(invoice.items.select_related("product", "product_batch").all())
+    return render(request, "pharmacy/returns.html", {"form": form, "invoice": invoice, "return_items": return_items})
 
 
 @login_required
