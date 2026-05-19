@@ -54,22 +54,22 @@
 
 <div class="section-heading mt-4">
   <div>
-    <h2>Recent invoices</h2>
-    <p>Jump back to printable invoice details.</p>
+    <h2>Recent orders</h2>
+    <p>Jump back to order details.</p>
   </div>
-  <a href="{% url 'invoices' %}" class="btn btn-outline-primary">Invoices</a>
+  <a href="{% url 'invoices' %}" class="btn btn-outline-primary">Orders</a>
 </div>
 <div class="card table-card">
   <div class="table-responsive">
     <table class="table align-middle mb-0">
-      <thead><tr><th>Invoice</th><th>Customer</th><th>Total</th><th></th></tr></thead>
+      <thead><tr><th>Order ID</th><th>Customer</th><th>Total</th><th></th></tr></thead>
       <tbody>
         {% for invoice in recent_invoices %}
           <tr>
-            <td><a href="{% url 'invoice_detail' invoice.pk %}">{{ invoice.invoice_number }}</a></td>
+            <td><a href="{% url 'order_detail' invoice.pk %}">{{ invoice.order_number }}</a></td>
             <td>{{ invoice.customer_name }}</td>
             <td>{{ invoice.grand_total }}</td>
-            <td class="text-end"><a href="{% url 'invoice_detail' invoice.pk %}" class="btn btn-sm btn-light">Open</a></td>
+            <td class="text-end"><a href="{% url 'order_detail' invoice.pk %}" class="btn btn-sm btn-light">Open</a></td>
           </tr>
         {% empty %}
           <tr><td colspan="4" class="text-center text-muted py-4">No invoices yet.</td></tr>

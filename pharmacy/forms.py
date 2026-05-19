@@ -62,7 +62,7 @@ class BoxPriceMixin:
 
 
 class ProductEntryForm(BoxPriceMixin, BootstrapFormMixin, forms.ModelForm):
-    batch_number = forms.CharField(max_length=100)
+    batch_number = forms.CharField(max_length=100, required=False)
     mfg_date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}), required=False)
     expiry_date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
     number_of_boxes = forms.IntegerField(min_value=1, initial=1)
@@ -71,6 +71,11 @@ class ProductEntryForm(BoxPriceMixin, BootstrapFormMixin, forms.ModelForm):
     tp_price_per_box = forms.DecimalField(min_value=0, decimal_places=2, max_digits=12, label="TP price per box")
     mrp_per_box = forms.DecimalField(min_value=0, decimal_places=2, max_digits=12, label="MRP per box")
     shelf_number = forms.CharField(max_length=80, required=False)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["category"].required = False
+        self.fields["strength"].required = False
 
     class Meta:
         model = Product
@@ -132,6 +137,12 @@ class ProductBatchForm(BootstrapFormMixin, forms.ModelForm):
             "mfg_date": forms.DateInput(attrs={"type": "date"}),
             "expiry_date": forms.DateInput(attrs={"type": "date"}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["batch_number"].required = False
+        self.fields["mfg_date"].required = False
+        self.fields["shelf_number"].required = False
 
     def clean(self):
         cleaned = super().clean()
@@ -219,14 +230,14 @@ class OrderPaymentForm(BootstrapFormMixin, forms.ModelForm):
 
 
 class ReturnLookupForm(BootstrapFormMixin, forms.Form):
-    invoice_number = forms.CharField(max_length=40, required=False)
-    invoice_date = forms.DateField(required=False, widget=forms.DateInput(attrs={"type": "date"}))
+    invoice_number = forms.CharField(max_length=40, required=False, label="Order ID")
+    invoice_date = forms.DateField(required=False, label="Order date", widget=forms.DateInput(attrs={"type": "date"}))
     phone = forms.CharField(max_length=40, required=False)
 
     def clean(self):
         cleaned = super().clean()
         if not cleaned.get("invoice_number") and not cleaned.get("phone"):
-            raise ValidationError("Enter an invoice number or phone number.")
+            raise ValidationError("Enter an order ID or phone number.")
         return cleaned
 
 

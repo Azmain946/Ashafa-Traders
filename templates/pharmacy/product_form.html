@@ -64,8 +64,10 @@
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
 
     document.getElementById("openProductBarcodeDialog").addEventListener("click", function () {
-      labelInput.value = boxes && boxes.value ? boxes.value : "1";
-      modal.show();
+      if (form.reportValidity()) {
+        labelInput.value = boxes && boxes.value ? boxes.value : "1";
+        modal.show();
+      }
     });
 
     document.getElementById("submitProductWithBarcode").addEventListener("click", function () {

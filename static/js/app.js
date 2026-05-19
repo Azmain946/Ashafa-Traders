@@ -79,6 +79,7 @@
       if (onSelect) {
         onSelect(batch);
       }
+      input.value = "";
     });
     document.addEventListener("click", (event) => {
       if (!results.contains(event.target) && event.target !== input) {
@@ -91,6 +92,7 @@
   let selectedVariant = null;
   let selectedBatch = null;
   let selectedPriceType = "tp";
+  let editingCartItem = null;
 
   function renderStrengthOptions() {
     const container = document.getElementById("quickStrengthOptions");
@@ -131,11 +133,12 @@
     document.getElementById("quickStockInfo").textContent = `${selectedBatch.stock_quantity} units available in batch ${selectedBatch.batch_number}. TP ${money(selectedBatch.tp_price, 3)} / MRP ${money(selectedBatch.mrp, 3)}.`;
   }
 
-  async function openQuickModal(batch) {
+  async function openQuickModal(batch, existingItem = null) {
     const modalEl = document.getElementById("quickProductModal");
     if (!modalEl) {
       return;
     }
+    editingCartItem = existingItem;
     const response = await fetch(`/api/products/${batch.product_id}/variants/`);
     const data = response.ok ? await response.json() : { variants: [] };
     quickVariants = data.variants.length ? data.variants : [{
@@ -164,6 +167,19 @@
     renderBatchOptions();
     document.getElementById("quickBatchSelect").value = selectedBatch.batch_id;
     updateSelectedBatch();
+    if (editingCartItem) {
+      if (selectedBatch && Number(editingCartItem.unit_price).toFixed(8) === Number(selectedBatch.mrp).toFixed(8)) {
+        selectedPriceType = "mrp";
+        document.getElementById("quickPriceType").value = "mrp";
+        document.querySelectorAll("[data-price-type]").forEach((button) => {
+          button.classList.toggle("btn-primary", button.dataset.priceType === "mrp");
+          button.classList.toggle("btn-outline-primary", button.dataset.priceType !== "mrp");
+        });
+        updateSelectedBatch();
+      }
+      document.getElementById("quickQuantity").value = editingCartItem.quantity || 1;
+      document.getElementById("quickDiscountPercent").value = editingCartItem.discount_percent || "0";
+    }
     bootstrap.Modal.getOrCreateInstance(modalEl).show();
   }
 
@@ -194,7 +210,7 @@
       body.innerHTML = '<tr class="empty-cart"><td colspan="7" class="text-center text-muted py-4">Search and add a medicine to begin.</td></tr>';
     } else {
       body.innerHTML = cart.items.map((item) => `
-        <tr data-batch-id="${item.batch_id}">
+        <tr class="cart-edit-row" data-cart-edit="1" data-product-id="${item.product_id}" data-batch-id="${item.batch_id}" data-quantity="${item.quantity}" data-discount-percent="${item.discount_percent}" data-unit-price="${item.unit_price}">
           <td>${item.name}</td>
           <td>${item.batch_number}</td>
           <td>${item.quantity}</td>
@@ -264,6 +280,7 @@
           quantity: document.getElementById("quickQuantity").value,
           price_type: document.getElementById("quickPriceType").value,
           discount_percent: document.getElementById("quickDiscountPercent").value,
+          replace: Boolean(editingCartItem),
         });
         renderCart(cart);
         bootstrap.Modal.getOrCreateInstance(document.getElementById("quickProductModal")).hide();
@@ -293,6 +310,18 @@
     const row = event.target.closest(".clickable-row");
     if (row && !event.target.closest("a, button, input, select, textarea")) {
       window.location.href = row.dataset.href;
+    }
+    const cartRow = event.target.closest("[data-cart-edit]");
+    if (cartRow && !event.target.closest("button")) {
+      openQuickModal({
+        product_id: Number(cartRow.dataset.productId),
+        batch_id: Number(cartRow.dataset.batchId),
+        name: cartRow.children[0]?.textContent || "Medicine",
+      }, {
+        quantity: cartRow.dataset.quantity,
+        discount_percent: cartRow.dataset.discountPercent,
+        unit_price: cartRow.dataset.unitPrice,
+      });
     }
   });
 

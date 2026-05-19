@@ -12,7 +12,7 @@
     <a href="{% url 'dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}"><i class="bi bi-speedometer2"></i> Dashboard</a>
     <a href="{% url 'products' %}" class="{% if 'product' in request.resolver_match.url_name %}active{% endif %}"><i class="bi bi-box-seam"></i> Products & Stock</a>
     <a href="{% url 'customers' %}" class="{% if 'customer' in request.resolver_match.url_name %}active{% endif %}"><i class="bi bi-people"></i> Customers</a>
-    <a href="{% url 'invoices' %}" class="{% if 'invoice' in request.resolver_match.url_name %}active{% endif %}"><i class="bi bi-receipt"></i> Invoices</a>
+    <a href="{% url 'invoices' %}" class="{% if 'invoice' in request.resolver_match.url_name or 'order_detail' == request.resolver_match.url_name %}active{% endif %}"><i class="bi bi-receipt"></i> Orders</a>
     <a href="{% url 'returns' %}" class="{% if request.resolver_match.url_name == 'returns' %}active{% endif %}"><i class="bi bi-arrow-counterclockwise"></i> Returns</a>
     <a href="{% url 'antibiotic_registers' %}" class="{% if request.resolver_match.url_name == 'antibiotic_registers' %}active{% endif %}"><i class="bi bi-journal-medical"></i> Antibiotic Register</a>
     <a href="{% url 'reminders' %}" class="{% if request.resolver_match.url_name == 'reminders' %}active{% endif %}"><i class="bi bi-bell"></i> Reminders</a>

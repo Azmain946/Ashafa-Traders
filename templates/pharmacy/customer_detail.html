@@ -18,15 +18,15 @@
   <div class="card-header bg-white"><strong>Purchase history</strong></div>
   <div class="table-responsive">
     <table class="table align-middle mb-0">
-      <thead><tr><th>Date</th><th>Invoice number</th><th>Paid</th><th>Due</th><th>Total</th></tr></thead>
+      <thead><tr><th>Date</th><th>Order ID</th><th>Paid</th><th>Due</th><th>Total</th></tr></thead>
       <tbody>
-        {% for invoice in invoices %}
+        {% for order in orders %}
           <tr>
-            <td>{{ invoice.invoice_date }}</td>
-            <td><a href="{% url 'invoice_detail' invoice.pk %}">{{ invoice.invoice_number }}</a></td>
-            <td>{{ invoice.paid_amount }}</td>
-            <td class="text-danger">{{ invoice.due_amount }}</td>
-            <td>{{ invoice.grand_total }}</td>
+            <td>{{ order.order_date }}</td>
+            <td><a href="{% url 'order_detail' order.pk %}">{{ order.order_number }}</a></td>
+            <td>{{ order.paid_amount }}</td>
+            <td class="text-danger">{{ order.due_amount }}</td>
+            <td>{{ order.grand_total }}</td>
           </tr>
         {% empty %}
           <tr><td colspan="5" class="text-center text-muted py-4">No purchase history.</td></tr>

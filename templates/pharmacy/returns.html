@@ -5,16 +5,16 @@
   <div>
     <span class="eyebrow">Returns</span>
     <h1>Return entry</h1>
-    <p>Find the original invoice, choose items, and restock returned quantities.</p>
+    <p>Find the original order, choose items, and restock returned quantities.</p>
   </div>
 </div>
 <form method="get" class="card soft-card mb-4">
   <div class="card-body">
     <div class="row g-3 align-items-end">
-      <div class="col-md-4">{{ form.invoice_number.label_tag }}{{ form.invoice_number }}</div>
+      <div class="col-md-4"><label class="form-label" for="{{ form.invoice_number.id_for_label }}">Order ID</label>{{ form.invoice_number }}</div>
       <div class="col-md-4">{{ form.invoice_date.label_tag }}{{ form.invoice_date }}</div>
       <div class="col-md-4">{{ form.phone.label_tag }}{{ form.phone }}</div>
-      <div class="col-12"><button class="btn btn-outline-primary">Find invoice</button></div>
+      <div class="col-12"><button class="btn btn-outline-primary">Find order</button></div>
     </div>
   </div>
 </form>
@@ -24,7 +24,7 @@
     {% csrf_token %}
     <input type="hidden" name="invoice_id" value="{{ invoice.id }}">
     <div class="card-header bg-white d-flex justify-content-between">
-      <strong>{{ invoice.invoice_number }} - {{ invoice.customer_name }}</strong>
+      <strong>{% if invoice.order %}{{ invoice.order.order_number }}{% else %}{{ invoice.invoice_number }}{% endif %} - {{ invoice.customer_name }}</strong>
       <span>Total {{ invoice.grand_total }}</span>
     </div>
     <div class="table-responsive">

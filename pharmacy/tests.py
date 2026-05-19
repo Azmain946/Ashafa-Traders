@@ -38,7 +38,7 @@ class PharmacyWorkflowTests(TestCase):
 
     def test_checkout_creates_invoice_and_decrements_stock(self):
         session = SessionLike()
-        session["pending_order_number"] = "ORD-20990101-0001"
+        session["pending_order_number"] = "2099010101"
         add_or_update_cart_item(session, self.batch.id, quantity=2, discount_percent=Decimal("10.00"))
 
         invoice = finalize_checkout(
@@ -57,7 +57,8 @@ class PharmacyWorkflowTests(TestCase):
         self.batch.refresh_from_db()
         self.assertEqual(self.batch.stock_quantity, 8)
         self.assertEqual(invoice.items.count(), 1)
-        self.assertEqual(invoice.order.order_number, "ORD-20990101-0001")
+        self.assertEqual(invoice.order.order_number, "2099010101")
+        self.assertEqual(invoice.invoice_number, "20990101011")
         self.assertEqual(invoice.items.first().discount_percent, Decimal("10.00"))
         self.assertEqual(invoice.subtotal, Decimal("25.20"))
         self.assertEqual(invoice.round_off_amount, Decimal("0.20"))
@@ -117,3 +118,30 @@ class PharmacyWorkflowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.batch.refresh_from_db()
         self.assertContains(response, self.batch.barcode)
+
+    def test_product_entry_accepts_optional_category_strength_and_batch_fields(self):
+        self.user.is_superuser = True
+        self.user.save(update_fields=["is_superuser"])
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("product_create"),
+            {
+                "print_barcode": "1",
+                "label_count": "2",
+                "name": "Optional Entry",
+                "generic_name": "Optional",
+                "expiry_date": (timezone.localdate() + timedelta(days=180)).isoformat(),
+                "number_of_boxes": "2",
+                "units_per_box": "10",
+                "buy_price_per_box": "80.00",
+                "tp_price_per_box": "95.12",
+                "mrp_per_box": "100.87",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        product = Product.objects.get(name="Optional Entry")
+        batch = product.batches.first()
+        self.assertEqual(product.strength, "")
+        self.assertIsNone(product.category)
+        self.assertTrue(batch.batch_number)
+        self.assertIsNone(batch.mfg_date)

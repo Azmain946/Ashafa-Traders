@@ -64,3 +64,12 @@
   <p class="invoice-footer">{{ app_settings.invoice_footer }}</p>
 </section>
 {% endblock %}
+{% block extra_js %}
+{% if request.GET.print %}
+<script>
+  window.addEventListener("load", function () {
+    window.print();
+  });
+</script>
+{% endif %}
+{% endblock %}

@@ -202,7 +202,7 @@ class Product(TimeStampedModel):
 
 class ProductBatch(TimeStampedModel):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="batches")
-    batch_number = models.CharField(max_length=100, db_index=True)
+    batch_number = models.CharField(max_length=100, blank=True, db_index=True)
     barcode = models.CharField(max_length=80, unique=True, blank=True, null=True, db_index=True)
     mfg_date = models.DateField("Manufacturing date", null=True, blank=True)
     expiry_date = models.DateField(db_index=True)
@@ -233,6 +233,8 @@ class ProductBatch(TimeStampedModel):
         return f"{self.product.display_name} - {self.batch_number}"
 
     def save(self, *args, **kwargs):
+        if not self.batch_number:
+            self.batch_number = f"ENTRY-{timezone.now():%y%m%d}{uuid.uuid4().hex[:5].upper()}"
         if not self.barcode:
             self.barcode = generate_batch_barcode()
         super().save(*args, **kwargs)
@@ -273,20 +275,20 @@ class Customer(TimeStampedModel):
 
     def save(self, *args, **kwargs):
         if not self.customer_code:
-            self.customer_code = f"CUST-{uuid.uuid4().hex[:8].upper()}"
+            self.customer_code = f"{timezone.now():%Y%m%d}{Customer.objects.count() + 1:02d}"
         super().save(*args, **kwargs)
 
     @property
     def total_bought(self):
-        return self.invoices.aggregate(total=Sum("grand_total"))["total"] or Decimal("0.00")
+        return self.orders.aggregate(total=Sum("grand_total"))["total"] or Decimal("0.00")
 
     @property
     def total_paid(self):
-        return self.invoices.aggregate(total=Sum("paid_amount"))["total"] or Decimal("0.00")
+        return self.orders.aggregate(total=Sum("paid_amount"))["total"] or Decimal("0.00")
 
     @property
     def total_due(self):
-        return self.invoices.aggregate(total=Sum("due_amount"))["total"] or Decimal("0.00")
+        return self.orders.aggregate(total=Sum("due_amount"))["total"] or Decimal("0.00")
 
 
 class Supplier(TimeStampedModel):

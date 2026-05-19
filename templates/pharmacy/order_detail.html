@@ -40,6 +40,7 @@
       {% csrf_token %}
       <div class="card-body">
         <h2 class="h5">Payment against order ID</h2>
+        <p class="text-muted small">Updating this order generates a new printable invoice.</p>
         <div class="totals-panel mb-3">
           <div><span>Subtotal</span><strong>{{ order.subtotal|floatformat:2 }}</strong></div>
           <div><span>Discount</span><strong>{{ order.discount_amount|floatformat:2 }}</strong></div>

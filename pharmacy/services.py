@@ -45,14 +45,17 @@ def rounded_total(value):
     return Decimal(value or 0).to_integral_value(rounding=ROUND_FLOOR).quantize(MONEY)
 
 
-def generate_invoice_number():
+def generate_invoice_number(order=None):
+    if order is not None:
+        next_number = order.invoices.count() + 1
+        return f"{order.order_number}{next_number}"
     today = timezone.localdate()
     with transaction.atomic():
         sequence, _ = InvoiceSequence.objects.select_for_update().get_or_create(date=today)
         sequence.last_number = F("last_number") + 1
         sequence.save(update_fields=["last_number"])
         sequence.refresh_from_db(fields=["last_number"])
-        return f"INV-{today:%Y%m%d}-{sequence.last_number:04d}"
+        return f"{today:%Y%m%d}{sequence.last_number:02d}"
 
 
 def generate_order_number():
@@ -62,7 +65,7 @@ def generate_order_number():
         sequence.last_number = F("last_number") + 1
         sequence.save(update_fields=["last_number"])
         sequence.refresh_from_db(fields=["last_number"])
-        return f"ORD-{today:%Y%m%d}-{sequence.last_number:04d}"
+        return f"{today:%Y%m%d}{sequence.last_number:02d}"
 
 
 def reserve_order_number(session):
@@ -252,7 +255,7 @@ def finalize_checkout(session, checkout_data, user=None):
     )
     invoice = SalesInvoice.objects.create(
         order=order,
-        invoice_number=generate_invoice_number(),
+        invoice_number=generate_invoice_number(order),
         customer=customer,
         customer_name=(checkout_data.get("customer_name") or getattr(customer, "name", "") or "Walk-in Customer"),
         customer_phone=(checkout_data.get("customer_phone") or getattr(customer, "phone", "")),
@@ -311,6 +314,29 @@ def finalize_checkout(session, checkout_data, user=None):
 
 
 @transaction.atomic
+def create_order_update_invoice(order, user=None):
+    order = Order.objects.select_for_update().select_related("customer").get(pk=order.pk)
+    invoice = SalesInvoice.objects.create(
+        order=order,
+        invoice_number=generate_invoice_number(order),
+        customer=order.customer,
+        customer_name=order.customer_name,
+        customer_phone=order.customer_phone,
+        subtotal=order.subtotal,
+        discount_amount=order.discount_amount,
+        round_off_amount=order.round_off_amount,
+        grand_total=order.grand_total,
+        paid_amount=order.paid_amount,
+        due_amount=order.due_amount,
+        payment_status=order.payment_status,
+        notes=order.notes,
+        created_by=user if getattr(user, "is_authenticated", False) else None,
+    )
+    cache.delete("dashboard_metrics")
+    return invoice
+
+
+@transaction.atomic
 def adjust_stock(batch, action, quantity, note="", user=None):
     quantity = int(quantity)
     if quantity <= 0:
@@ -342,12 +368,12 @@ def adjust_stock(batch, action, quantity, note="", user=None):
 
 def lookup_return_invoice(invoice_number=None, phone=None, invoice_date=None):
     qs = (
-        SalesInvoice.objects.select_related("customer")
+        SalesInvoice.objects.select_related("customer", "order")
         .prefetch_related("items__product", "items__product_batch")
         .order_by("-created_at")
     )
     if invoice_number:
-        qs = qs.filter(invoice_number__iexact=invoice_number.strip())
+        qs = qs.filter(Q(invoice_number__iexact=invoice_number.strip()) | Q(order__order_number__iexact=invoice_number.strip()))
     if phone:
         qs = qs.filter(Q(customer_phone__icontains=phone.strip()) | Q(customer__phone__icontains=phone.strip()))
     if invoice_date:

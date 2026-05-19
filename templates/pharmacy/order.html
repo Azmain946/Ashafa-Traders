@@ -33,7 +33,7 @@
           <thead><tr><th>Medicine</th><th>Batch</th><th>Qty</th><th>Price</th><th>Discount %</th><th>Subtotal</th><th></th></tr></thead>
           <tbody id="cartTableBody">
             {% for item in cart.items %}
-              <tr data-batch-id="{{ item.batch.id }}">
+              <tr class="cart-edit-row" data-cart-edit="1" data-product-id="{{ item.product.id }}" data-batch-id="{{ item.batch.id }}" data-quantity="{{ item.quantity }}" data-discount-percent="{{ item.discount_percent }}" data-unit-price="{{ item.unit_price }}">
                 <td>{{ item.product.display_name }}</td>
                 <td>{{ item.batch.batch_number }}</td>
                 <td>{{ item.quantity }}</td>

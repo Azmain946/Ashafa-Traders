@@ -49,6 +49,7 @@ from .services import (
     add_or_update_cart_item,
     adjust_stock,
     cart_summary,
+    create_order_update_invoice,
     dashboard_metrics,
     finalize_checkout,
     lookup_return_invoice,
@@ -83,8 +84,8 @@ def home(request):
         .prefetch_related("batches")
         .order_by("-updated_at")[:12]
     )
-    recent_invoices = SalesInvoice.objects.only(
-        "invoice_number", "customer_name", "grand_total", "created_at", "payment_status"
+    recent_invoices = Order.objects.only(
+        "order_number", "customer_name", "grand_total", "created_at", "payment_status"
     )[:6]
     return render(
         request,
@@ -317,9 +318,9 @@ def customers(request):
     sort = request.GET.get("sort", "name")
     query = request.GET.get("q", "").strip()
     qs = Customer.objects.annotate(
-        total_bought_value=Coalesce(Sum("invoices__grand_total"), Decimal("0.00"), output_field=DecimalField()),
-        total_due_value=Coalesce(Sum("invoices__due_amount"), Decimal("0.00"), output_field=DecimalField()),
-        total_paid_value=Coalesce(Sum("invoices__paid_amount"), Decimal("0.00"), output_field=DecimalField()),
+        total_bought_value=Coalesce(Sum("orders__grand_total"), Decimal("0.00"), output_field=DecimalField()),
+        total_due_value=Coalesce(Sum("orders__due_amount"), Decimal("0.00"), output_field=DecimalField()),
+        total_paid_value=Coalesce(Sum("orders__paid_amount"), Decimal("0.00"), output_field=DecimalField()),
     )
     if query:
         qs = qs.filter(Q(name__icontains=query) | Q(phone__icontains=query) | Q(customer_code__icontains=query))
@@ -336,8 +337,8 @@ def customers(request):
 @login_required
 def customer_detail(request, pk):
     customer = get_object_or_404(Customer, pk=pk)
-    invoices = customer.invoices.all().order_by("-created_at")
-    return render(request, "pharmacy/customer_detail.html", {"customer": customer, "invoices": invoices})
+    orders = customer.orders.all().order_by("-created_at")
+    return render(request, "pharmacy/customer_detail.html", {"customer": customer, "orders": orders})
 
 
 @login_required
@@ -386,11 +387,10 @@ def supplier_detail(request, pk):
 @login_required
 def invoices(request):
     query = request.GET.get("q", "").strip()
-    qs = SalesInvoice.objects.select_related("customer", "order").order_by("-created_at")
+    qs = Order.objects.select_related("customer").order_by("-created_at")
     if query:
         qs = qs.filter(
-            Q(invoice_number__icontains=query)
-            | Q(order__order_number__icontains=query)
+            Q(order_number__icontains=query)
             | Q(customer_name__icontains=query)
             | Q(customer_phone__icontains=query)
         )
@@ -404,9 +404,10 @@ def order_detail(request, pk):
     if request.method == "POST":
         form = OrderPaymentForm(request.POST, instance=order)
         if form.is_valid():
-            form.save()
-            messages.success(request, "Order payment details updated.")
-            return redirect("order_detail", pk=order.pk)
+            updated_order = form.save()
+            invoice = create_order_update_invoice(updated_order, request.user)
+            messages.success(request, "Order payment details updated and new invoice generated.")
+            return redirect(f"{reverse('invoice_detail', args=[invoice.pk])}?print=1")
     return render(request, "pharmacy/order_detail.html", {"order": order, "form": form})
 
 
@@ -431,7 +432,7 @@ def returns(request):
             form.cleaned_data.get("invoice_date"),
         )
         if not invoice:
-            messages.warning(request, "No matching invoice found.")
+            messages.warning(request, "No matching order found.")
     if request.method == "POST":
         invoice = get_object_or_404(SalesInvoice, pk=request.POST.get("invoice_id"))
         try:
@@ -452,12 +453,13 @@ def returns(request):
 @login_required
 def antibiotic_registers(request):
     query = request.GET.get("q", "").strip()
-    qs = AntibioticRegisterEntry.objects.select_related("customer", "product", "invoice").order_by("-sale_date")
+    qs = AntibioticRegisterEntry.objects.select_related("customer", "product", "invoice", "invoice__order").order_by("-sale_date")
     if query:
         qs = qs.filter(
             Q(customer__name__icontains=query)
             | Q(product__name__icontains=query)
             | Q(invoice__invoice_number__icontains=query)
+            | Q(invoice__order__order_number__icontains=query)
         )
     return render(request, "pharmacy/antibiotic_registers.html", {"page_obj": paginate(request, qs), "query": query})
 
