@@ -1,3 +1,4 @@
+from datetime import timedelta
 import json
 import secrets
 import string
@@ -33,7 +34,6 @@ from .forms import (
     StyledPasswordChangeForm,
     SupplierForm,
     SupplierReceiptForm,
-    UserProfileForm,
 )
 from .models import (
     AntibioticRegisterEntry,
@@ -46,6 +46,7 @@ from .models import (
     ProductCategory,
     PurchaseInvoice,
     SalesInvoice,
+    SalesInvoiceItem,
     Supplier,
     UserProfile,
 )
@@ -98,7 +99,7 @@ def can_manage_staff(user):
     if user.is_superuser:
         return True
     profile = getattr(user, "profile", None)
-    return getattr(profile, "role", "") == UserProfile.ROLE_ADMIN
+    return getattr(profile, "role", "") in {UserProfile.ROLE_ADMIN, UserProfile.ROLE_MANAGER}
 
 
 def _generate_staff_username():
@@ -118,12 +119,24 @@ def _generate_staff_password():
 @login_required
 def home(request):
     categories = ProductCategory.objects.prefetch_related("products").all()[:8]
-    featured_products = (
-        Product.objects.filter(is_active=True)
-        .select_related("category", "brand")
-        .prefetch_related("batches")
-        .order_by("-updated_at")[:12]
+    cutoff = timezone.now() - timedelta(days=15)
+    sold_rows = (
+        SalesInvoiceItem.objects.filter(invoice__created_at__gte=cutoff)
+        .values("product_id")
+        .annotate(total_sold=Sum("quantity"))
+        .order_by("-total_sold")[:12]
     )
+    ordered_ids = [row["product_id"] for row in sold_rows]
+    if ordered_ids:
+        id_to_product = {
+            p.pk: p
+            for p in Product.objects.filter(is_active=True, pk__in=ordered_ids)
+            .select_related("category", "brand")
+            .prefetch_related("batches")
+        }
+        featured_products = [id_to_product[pid] for pid in ordered_ids if pid in id_to_product]
+    else:
+        featured_products = []
     recent_invoices = Order.objects.only(
         "order_number", "customer_name", "grand_total", "created_at", "payment_status"
     )[:6]
@@ -590,9 +603,7 @@ def reminders(request):
 def settings_page(request):
     new_staff_credentials = request.session.pop("flash_staff_credentials", None)
     app_settings = AppSetting.load()
-    profile, _ = UserProfile.objects.get_or_create(user=request.user)
     setting_form = AppSettingForm(instance=app_settings)
-    profile_form = UserProfileForm(instance=profile, user=request.user)
     password_form = StyledPasswordChangeForm(request.user)
     staff_list = []
     if can_manage_staff(request.user):
@@ -609,12 +620,6 @@ def settings_page(request):
                 setting_form.save()
                 messages.success(request, "Business settings updated.")
                 return redirect("settings")
-        elif section == "profile":
-            profile_form = UserProfileForm(request.POST, instance=profile, user=request.user)
-            if profile_form.is_valid():
-                profile_form.save()
-                messages.success(request, "Profile settings updated.")
-                return redirect("settings")
         elif section == "password":
             password_form = StyledPasswordChangeForm(request.user, request.POST)
             if password_form.is_valid():
@@ -622,10 +627,19 @@ def settings_page(request):
                 messages.success(request, "Password changed. Please log in again if prompted.")
                 return redirect("settings")
         elif section == "add_staff" and can_manage_staff(request.user):
+            staff_name = (request.POST.get("staff_name") or "").strip()
+            if not staff_name:
+                messages.error(request, "Enter a name for the staff member.")
+                return redirect("settings")
             User = get_user_model()
             username = _generate_staff_username()
             plain_password = _generate_staff_password()
-            new_user = User.objects.create_user(username=username, password=plain_password, is_staff=True)
+            new_user = User.objects.create_user(
+                username=username,
+                password=plain_password,
+                is_staff=True,
+                first_name=staff_name[:150],
+            )
             UserProfile.objects.create(user=new_user, role=UserProfile.ROLE_STAFF)
             request.session["flash_staff_credentials"] = {"username": username, "password": plain_password}
             messages.success(
@@ -657,7 +671,6 @@ def settings_page(request):
         "pharmacy/settings.html",
         {
             "setting_form": setting_form,
-            "profile_form": profile_form,
             "password_form": password_form,
             "printer_settings": printer_settings_payload(app_settings),
             "can_manage_staff": can_manage_staff(request.user),
@@ -855,6 +868,27 @@ def api_qz_sign(request):
         private_key = serialization.load_pem_private_key(key_path.read_bytes(), password=None)
         signature = private_key.sign(to_sign.encode("utf-8"), padding.PKCS1v15(), hashes.SHA512())
         return HttpResponse(base64.b64encode(signature).decode("ascii"), content_type="text/plain")
+    except Exception as exc:
+        return JsonResponse({"error": str(exc)}, status=500)
+
+
+@login_required
+@require_GET
+def sign_qz(request):
+    """QZ Tray signing via PyOpenSSL; JSON body matches the frontend setSignaturePromise handler."""
+    import base64
+
+    from OpenSSL import crypto
+
+    data = request.GET.get("request", "")
+    key_path = django_settings.QZ_PRIVATE_KEY_PATH
+    if not data or not key_path.exists():
+        return JsonResponse({"error": "QZ signing is not configured."}, status=503)
+    try:
+        with open(key_path, "rb") as f:
+            private_key = crypto.load_privatekey(crypto.FILETYPE_PEM, f.read())
+        signature = crypto.sign(private_key, data.encode("utf-8"), "sha512")
+        return JsonResponse({"signature": base64.b64encode(signature).decode("ascii")})
     except Exception as exc:
         return JsonResponse({"error": str(exc)}, status=500)
 

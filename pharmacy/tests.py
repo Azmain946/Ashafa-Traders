@@ -157,9 +157,11 @@ class PharmacyWorkflowTests(TestCase):
         cert = self.client.get(reverse("api_qz_certificate"))
         self.assertEqual(cert.status_code, 200)
         self.assertIn("BEGIN CERTIFICATE", cert.content.decode())
-        sign = self.client.get(reverse("api_qz_sign"), {"request": "test-message"})
+        sign = self.client.get(reverse("sign_qz"), {"request": "test-message"})
         self.assertEqual(sign.status_code, 200)
-        self.assertGreater(len(sign.content), 20)
+        data = sign.json()
+        self.assertIn("signature", data)
+        self.assertGreater(len(data["signature"]), 20)
 
     def test_printer_settings_and_receipt_api(self):
         from pharmacy.models import AppSetting
@@ -298,9 +300,51 @@ class PharmacyWorkflowTests(TestCase):
         admin_user = get_user_model().objects.create_user("adminuser", password="adminpass", is_staff=True)
         UserProfile.objects.create(user=admin_user, role=UserProfile.ROLE_ADMIN)
         self.client.force_login(admin_user)
-        response = self.client.post(reverse("settings"), {"section": "add_staff"}, follow=False)
+        response = self.client.post(
+            reverse("settings"),
+            {"section": "add_staff", "staff_name": "Counter Staff"},
+            follow=False,
+        )
         self.assertEqual(response.status_code, 302)
         self.assertTrue(get_user_model().objects.exclude(pk=admin_user.pk).filter(is_staff=True).exists())
         get_response = self.client.get(reverse("settings"))
         self.assertEqual(get_response.status_code, 200)
         self.assertContains(get_response, "Staff accounts")
+        new_user = get_user_model().objects.get(first_name="Counter Staff")
+        self.assertTrue(new_user.is_staff)
+        self.assertNotEqual(new_user.pk, admin_user.pk)
+
+    def test_manager_can_add_staff_from_settings(self):
+        mgr = get_user_model().objects.create_user("mgruser", password="mgrpass", is_staff=True)
+        UserProfile.objects.create(user=mgr, role=UserProfile.ROLE_MANAGER)
+        self.client.force_login(mgr)
+        response = self.client.post(
+            reverse("settings"),
+            {"section": "add_staff", "staff_name": "New Hire"},
+            follow=False,
+        )
+        self.assertEqual(response.status_code, 302)
+        hired = get_user_model().objects.get(first_name="New Hire")
+        self.assertTrue(hired.is_staff)
+
+    def test_home_lists_bestsellers_last_15_days(self):
+        session = SessionLike()
+        session["pending_order_number"] = "2099010111"
+        add_or_update_cart_item(session, self.batch.id, quantity=3)
+        finalize_checkout(
+            session,
+            {
+                "customer_name": "Popular Buyer",
+                "customer_phone": "01710000003",
+                "discount_percent": Decimal("0.00"),
+                "discount_amount": Decimal("0.00"),
+                "paid_amount": Decimal("100.00"),
+                "notes": "",
+            },
+            self.user,
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("home"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Amoxicillin")
+        self.assertContains(response, "last 15 days")

@@ -46,46 +46,39 @@
     if (!window.qz || securityConfigured) {
       return;
     }
-    let signingReady = false;
     try {
-      const certResponse = await fetch("/api/qz/certificate/", { cache: "no-store", credentials: "same-origin" });
-      if (certResponse.ok) {
-        const certificate = await certResponse.text();
-        if (certificate && certificate.includes("BEGIN CERTIFICATE")) {
-          qz.security.setCertificatePromise(function (resolve, reject) {
-            resolve(certificate);
-          });
-          if (typeof qz.security.setSignatureAlgorithm === "function") {
-            qz.security.setSignatureAlgorithm("SHA512");
-          }
-          qz.security.setSignaturePromise(function (toSign) {
-            return function (resolve, reject) {
-              fetch(`/api/qz/sign/?request=${encodeURIComponent(toSign)}`, {
-                credentials: "same-origin",
-                cache: "no-store",
-              })
-                .then((response) => {
-                  if (!response.ok) {
-                    return response.json().then((body) => {
-                      throw new Error(body.error || "Signing failed");
-                    });
-                  }
-                  return response.text();
-                })
-                .then(resolve)
-                .catch(reject);
-            };
-          });
-          signingReady = true;
-          console.info("QZ Tray signing enabled for silent printing.");
-        }
-      } else {
-        console.warn("QZ certificate endpoint returned", certResponse.status);
+      qz.security.setCertificatePromise(function (resolve, reject) {
+        fetch("/static/digital-certificate.txt", { cache: "no-store" })
+          .then((res) => res.text())
+          .then(resolve)
+          .catch(reject);
+      });
+      if (typeof qz.security.setSignatureAlgorithm === "function") {
+        qz.security.setSignatureAlgorithm("SHA512");
       }
+      qz.security.setSignaturePromise(function (toSign) {
+        return function (resolve, reject) {
+          fetch("/sign-qz?request=" + encodeURIComponent(toSign), {
+            credentials: "same-origin",
+            cache: "no-store",
+          })
+            .then((res) => {
+              if (!res.ok) {
+                return res.json().then((body) => {
+                  throw new Error(body.error || "Signing failed");
+                });
+              }
+              return res.json();
+            })
+            .then((data) => resolve(data.signature))
+            .catch(reject);
+        };
+      });
+      securityConfigured = true;
     } catch (error) {
       console.warn("QZ signing setup failed:", error);
+      securityConfigured = false;
     }
-    securityConfigured = signingReady;
   }
 
   async function connectQZ() {

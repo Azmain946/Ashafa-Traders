@@ -30,6 +30,7 @@ urlpatterns = [
     path("api/dashboard/", views.api_dashboard, name="api_dashboard"),
     path("api/qz/certificate/", views.api_qz_certificate, name="api_qz_certificate"),
     path("api/qz/sign/", views.api_qz_sign, name="api_qz_sign"),
+    path("sign-qz/", views.sign_qz, name="sign_qz"),
     path("api/printing/settings/", views.api_printer_settings, name="api_printer_settings"),
     path("api/printing/settings/save/", views.api_printer_settings_save, name="api_printer_settings_save"),
     path("api/printing/test-receipt/", views.api_print_test_receipt, name="api_print_test_receipt"),
