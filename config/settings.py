@@ -3,13 +3,12 @@ Django settings for config project.
 """
 
 import os
-import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+from django.core.exceptions import ImproperlyConfigured
 
-IN_TESTS = "test" in sys.argv
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ.get(
     "DJANGO_SECRET_KEY",
@@ -70,36 +69,51 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 
 
-if IN_TESTS:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": ":memory:",
-        }
+def _postgresql_from_url(database_url: str) -> dict:
+    if database_url.startswith("postgres://"):
+        database_url = "postgresql://" + database_url[len("postgres://") :]
+    db_url = urlparse(database_url)
+    if db_url.scheme not in ("postgresql", "postgres"):
+        raise ImproperlyConfigured(
+            f"DATABASE_URL must use postgresql:// (got {db_url.scheme!r})."
+        )
+    return {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": db_url.path.lstrip("/"),
+        "USER": db_url.username or "",
+        "PASSWORD": db_url.password or "",
+        "HOST": db_url.hostname or "",
+        "PORT": str(db_url.port or ""),
     }
-else:
-    DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
-    if DATABASE_URL:
-        if DATABASE_URL.startswith("postgres://"):
-            DATABASE_URL = "postgresql://" + DATABASE_URL[len("postgres://") :]
-        db_url = urlparse(DATABASE_URL)
-        DATABASES = {
-            "default": {
-                "ENGINE": "django.db.backends.postgresql",
-                "NAME": db_url.path.lstrip("/"),
-                "USER": db_url.username or "",
-                "PASSWORD": db_url.password or "",
-                "HOST": db_url.hostname or "",
-                "PORT": db_url.port or "",
-            }
-        }
-    else:
-        DATABASES = {
-            "default": {
-                "ENGINE": "django.db.backends.sqlite3",
-                "NAME": BASE_DIR / "db.sqlite3",
-            }
-        }
+
+
+def _postgresql_from_env() -> dict:
+    database_url = os.environ.get("DATABASE_URL", "").strip()
+    if database_url:
+        return _postgresql_from_url(database_url)
+
+    name = (
+        os.environ.get("POSTGRES_DB", "").strip()
+        or os.environ.get("DB_NAME", "").strip()
+    )
+    if not name:
+        raise ImproperlyConfigured(
+            "PostgreSQL is required. Set DATABASE_URL or POSTGRES_DB "
+            "(and POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_PORT)."
+        )
+    return {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": name,
+        "USER": os.environ.get("POSTGRES_USER", os.environ.get("DB_USER", "")),
+        "PASSWORD": os.environ.get(
+            "POSTGRES_PASSWORD", os.environ.get("DB_PASSWORD", "")
+        ),
+        "HOST": os.environ.get("POSTGRES_HOST", os.environ.get("DB_HOST", "localhost")),
+        "PORT": os.environ.get("POSTGRES_PORT", os.environ.get("DB_PORT", "5432")),
+    }
+
+
+DATABASES = {"default": _postgresql_from_env()}
 
 
 AUTH_PASSWORD_VALIDATORS = [

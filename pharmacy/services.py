@@ -427,7 +427,7 @@ def finalize_checkout(session, checkout_data, user=None):
 
 @transaction.atomic
 def create_order_update_invoice(order, user=None):
-    order = Order.objects.select_for_update().select_related("customer").get(pk=order.pk)
+    order = Order.objects.select_for_update().get(pk=order.pk)
     source_invoice = (
         SalesInvoice.objects.filter(order=order)
         .annotate(item_count=Count("items"))
@@ -612,11 +612,11 @@ def _invoice_with_returnable_lines(invoice):
 def process_return(invoice, quantities, refund_method=ReturnTransaction.REFUND_ADJUST_DUE, user=None, notes=""):
     if not invoice:
         raise ValidationError("Invoice is required.")
-    invoice = SalesInvoice.objects.select_for_update().select_related("order").get(pk=invoice.pk)
+    invoice = SalesInvoice.objects.select_for_update().get(pk=invoice.pk)
     invoice = _invoice_with_returnable_lines(invoice)
     if not invoice:
         raise ValidationError("Invoice is required.")
-    invoice = SalesInvoice.objects.select_for_update().select_related("order").get(pk=invoice.pk)
+    invoice = SalesInvoice.objects.select_for_update().get(pk=invoice.pk)
     original_subtotal = money(invoice.subtotal)
     order_discount_amount = money(invoice.discount_amount)
 

@@ -7,12 +7,27 @@ customer/supplier history, returns, antibiotic registers, reminders, and printab
 
 - Python 3.12+
 - Django 6.0.x
-- SQLite for local development (default), optional PostgreSQL via `DATABASE_URL`
+- PostgreSQL (local/offline; required)
 - Django templates and ORM
 - Bootstrap 5.3.8, Bootstrap Icons, vanilla JavaScript, and jQuery
 - Pillow for product image processing and thumbnails
 
 ## Local setup
+
+Install and start PostgreSQL, then create a database (example):
+
+```bash
+createdb pharmacy
+# or: psql -c "CREATE DATABASE pharmacy;"
+```
+
+Set the connection string (copy `.env.example` to `.env` if you use one):
+
+```bash
+export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pharmacy
+```
+
+Run the app:
 
 ```bash
 python3 -m pip install -r requirements.txt
@@ -32,12 +47,16 @@ Seed login:
 - `DJANGO_DEBUG` — set to `0` in production
 - `DJANGO_ALLOWED_HOSTS` — comma-separated host list
 - `DJANGO_TIME_ZONE` — default `Asia/Dhaka`
-- `DATABASE_URL` — PostgreSQL URL (if set, SQLite is not used)
+- `DATABASE_URL` — PostgreSQL URL (required unless `POSTGRES_*` / `DB_*` vars are set)
+- `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT` — alternative to `DATABASE_URL`
 - `CSRF_TRUSTED_ORIGINS` — comma-separated origins for HTTPS hosts
 
 ## Tests
 
+Tests use the same PostgreSQL server; Django creates a separate `test_<dbname>` database.
+
 ```bash
+export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pharmacy
 python3 manage.py test pharmacy
 ```
 
