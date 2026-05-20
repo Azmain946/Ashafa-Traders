@@ -11,7 +11,6 @@ from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db.models import DecimalField, Q, Sum
 from django.db.models.functions import Coalesce
-from django.conf import settings as django_settings
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -849,56 +848,6 @@ def cart_payload(summary):
         "unrounded_total": str(summary.get("unrounded_total", summary["rounded_total"])),
         "count": summary["count"],
     }
-
-
-@login_required
-@require_GET
-def api_qz_certificate(request):
-    cert_path = django_settings.QZ_CERTIFICATE_PATH
-    if not cert_path.exists():
-        return HttpResponse("Certificate not configured.", status=404, content_type="text/plain")
-    return HttpResponse(cert_path.read_text(encoding="utf-8"), content_type="text/plain")
-
-
-@login_required
-@require_GET
-def api_qz_sign(request):
-    to_sign = request.GET.get("request", "")
-    key_path = django_settings.QZ_PRIVATE_KEY_PATH
-    if not to_sign or not key_path.exists():
-        return JsonResponse({"error": "QZ signing is not configured."}, status=503)
-    try:
-        import base64
-
-        from cryptography.hazmat.primitives import hashes, serialization
-        from cryptography.hazmat.primitives.asymmetric import padding
-
-        private_key = serialization.load_pem_private_key(key_path.read_bytes(), password=None)
-        signature = private_key.sign(to_sign.encode("utf-8"), padding.PKCS1v15(), hashes.SHA512())
-        return HttpResponse(base64.b64encode(signature).decode("ascii"), content_type="text/plain")
-    except Exception as exc:
-        return JsonResponse({"error": str(exc)}, status=500)
-
-
-@login_required
-@require_GET
-def sign_qz(request):
-    """QZ Tray signing via PyOpenSSL; JSON body matches the frontend setSignaturePromise handler."""
-    import base64
-
-    from OpenSSL import crypto
-
-    data = request.GET.get("request", "")
-    key_path = django_settings.QZ_PRIVATE_KEY_PATH
-    if not data or not key_path.exists():
-        return JsonResponse({"error": "QZ signing is not configured."}, status=503)
-    try:
-        with open(key_path, "rb") as f:
-            private_key = crypto.load_privatekey(crypto.FILETYPE_PEM, f.read())
-        signature = crypto.sign(private_key, data.encode("utf-8"), "sha512")
-        return JsonResponse({"signature": base64.b64encode(signature).decode("ascii")})
-    except Exception as exc:
-        return JsonResponse({"error": str(exc)}, status=500)
 
 
 @login_required

@@ -1,4 +1,4 @@
-"""Thermal receipt and QR label helpers for QZ Tray printing."""
+"""Thermal receipt and QR label helpers for printing."""
 
 from __future__ import annotations
 

@@ -152,17 +152,6 @@ class PharmacyWorkflowTests(TestCase):
         self.assertIn((0, 0, 0), pixels)
         self.assertIn((255, 255, 255), pixels)
 
-    def test_qz_signing_endpoints(self):
-        self.client.force_login(self.user)
-        cert = self.client.get(reverse("api_qz_certificate"))
-        self.assertEqual(cert.status_code, 200)
-        self.assertIn("BEGIN CERTIFICATE", cert.content.decode())
-        sign = self.client.get(reverse("sign_qz"), {"request": "test-message"})
-        self.assertEqual(sign.status_code, 200)
-        data = sign.json()
-        self.assertIn("signature", data)
-        self.assertGreater(len(data["signature"]), 20)
-
     def test_printer_settings_and_receipt_api(self):
         from pharmacy.models import AppSetting
         from pharmacy.printing import build_receipt_escpos, item_line

@@ -1,27 +1,22 @@
 /**
- * QZ Tray silent printing for Ashafa Pharmacy ERP.
- * Receipt: ESC/POS raw. Labels: high-res QR raster for thermal printers.
+ * QZ Tray printing (no signing — Allow popup when QZ Tray connects).
  */
 (function () {
   "use strict";
 
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
   let cachedSettings = null;
-  let securityConfigured = false;
 
   function notify(message, type) {
-    if (window.bootstrap && document.getElementById("qzPrintAlert")) {
-      const el = document.getElementById("qzPrintAlert");
+    const el = document.getElementById("qzPrintAlert");
+    if (el) {
       el.className = `alert alert-${type || "info"} mt-3`;
       el.textContent = message;
       el.classList.remove("d-none");
       return;
     }
     if (type === "danger") {
-      console.error(message);
       alert(message);
-    } else {
-      console.log(message);
     }
   }
 
@@ -42,68 +37,17 @@
     return data;
   }
 
-  async function configureSecurity() {
-    if (!window.qz || securityConfigured) {
-      return;
-    }
-    try {
-      qz.security.setCertificatePromise(function (resolve, reject) {
-        fetch("/static/digital-certificate.txt", { cache: "no-store" })
-          .then((res) => res.text())
-          .then(resolve)
-          .catch(reject);
-      });
-      if (typeof qz.security.setSignatureAlgorithm === "function") {
-        qz.security.setSignatureAlgorithm("SHA512");
-      }
-      qz.security.setSignaturePromise(function (toSign) {
-        return function (resolve, reject) {
-          fetch("/sign-qz?request=" + encodeURIComponent(toSign), {
-            credentials: "same-origin",
-            cache: "no-store",
-          })
-            .then((res) => {
-              if (!res.ok) {
-                return res.json().then((body) => {
-                  throw new Error(body.error || "Signing failed");
-                });
-              }
-              return res.json();
-            })
-            .then((data) => resolve(data.signature))
-            .catch(reject);
-        };
-      });
-      securityConfigured = true;
-    } catch (error) {
-      console.warn("QZ signing setup failed:", error);
-      securityConfigured = false;
-    }
-  }
-
   async function connectQZ() {
     if (!window.qz) {
-      throw new Error("QZ Tray library failed to load. Check your internet connection or host qz-tray.js locally.");
+      throw new Error("QZ Tray library failed to load.");
     }
-    await configureSecurity();
     if (!qz.websocket.isActive()) {
-      await qz.websocket.connect({ retries: 5, delay: 1 });
-    }
-    return true;
-  }
-
-  async function ensureConnected() {
-    try {
-      return await connectQZ();
-    } catch (error) {
-      throw new Error(
-        `Cannot connect to QZ Tray. Ensure QZ Tray is running on this computer. (${error.message || error})`,
-      );
+      await qz.websocket.connect();
     }
   }
 
   async function loadPrinters() {
-    await ensureConnected();
+    await connectQZ();
     const printers = await qz.printers.find();
     return printers.sort((a, b) => a.localeCompare(b));
   }
@@ -166,7 +110,7 @@
     const settings = await loadPrinterSettings();
     const printerName = explicitName || settings.receipt_printer_name;
     if (!printerName) {
-      throw new Error("Receipt printer is not configured. Open Settings and choose a receipt printer.");
+      throw new Error("Choose a receipt printer in Settings.");
     }
     return printerName;
   }
@@ -175,22 +119,15 @@
     const settings = await loadPrinterSettings();
     const printerName = explicitName || settings.label_printer_name;
     if (!printerName) {
-      throw new Error("Label printer is not configured. Open Settings and choose a label printer.");
+      throw new Error("Choose a label printer in Settings.");
     }
     return printerName;
   }
 
   async function printRawReceipt(printerName, receiptData) {
-    await ensureConnected();
+    await connectQZ();
     const config = qz.configs.create(printerName);
-    const payload = [
-      {
-        type: "raw",
-        format: "plain",
-        data: receiptData,
-      },
-    ];
-    return qz.print(config, payload);
+    return qz.print(config, [{ type: "raw", format: "plain", data: receiptData }]);
   }
 
   async function printReceipt(invoiceId) {
@@ -198,7 +135,6 @@
     const printerName = await resolveReceiptPrinter(data.printer_name);
     await printRawReceipt(printerName, data.receipt);
     notify("Receipt sent to printer.", "success");
-    return true;
   }
 
   async function printTestReceipt() {
@@ -206,13 +142,12 @@
     const printerName = await resolveReceiptPrinter(data.printer_name);
     await printRawReceipt(printerName, data.receipt);
     notify("Test receipt sent to printer.", "success");
-    return true;
   }
 
   async function fetchImageAsBase64(url) {
     const response = await fetch(url, { credentials: "same-origin", cache: "no-store" });
     if (!response.ok) {
-      throw new Error("Could not load QR image for label printing.");
+      throw new Error("Could not load QR image.");
     }
     const blob = await response.blob();
     return new Promise((resolve, reject) => {
@@ -227,7 +162,6 @@
   }
 
   function buildLabelPrintConfig(printerName, data) {
-    const printPx = Number(data.qr_print_pixels || 200);
     const labelMm = Number(data.label_width_mm || 20);
     return qz.configs.create(printerName, {
       copies: Number(data.copies || 1),
@@ -238,22 +172,7 @@
       density: 203,
       rasterize: true,
       scaleContent: true,
-      altPrinting: false,
     });
-  }
-
-  function buildLabelPrintData(imageBase64) {
-    if (!imageBase64 || imageBase64.length < 80) {
-      throw new Error("QR image data is empty. Check /api/batches/<id>/qr.png?print=1");
-    }
-    return [
-      {
-        type: "pixel",
-        format: "image",
-        flavor: "base64",
-        data: imageBase64,
-      },
-    ];
   }
 
   async function printLabel(batchId, copies) {
@@ -261,11 +180,12 @@
     const data = await fetchJson(`/api/batches/${batchId}/label/${query}`);
     const printerName = await resolveLabelPrinter(data.label_printer_name);
     const imageBase64 = await fetchImageAsBase64(data.image_url);
-    await ensureConnected();
+    await connectQZ();
     const config = buildLabelPrintConfig(printerName, data);
-    await qz.print(config, buildLabelPrintData(imageBase64));
-    notify(`Label sent to printer (${data.copies} cop${data.copies === 1 ? "y" : "ies"}).`, "success");
-    return true;
+    await qz.print(config, [
+      { type: "pixel", format: "image", flavor: "base64", data: imageBase64 },
+    ]);
+    notify(`Label sent (${data.copies} cop${data.copies === 1 ? "y" : "ies"}).`, "success");
   }
 
   async function printTestLabel() {
@@ -273,19 +193,18 @@
     const data = await fetchJson(`/api/printing/test-label/?copies=${encodeURIComponent(copies)}`);
     const printerName = await resolveLabelPrinter(data.label_printer_name);
     const imageBase64 = await fetchImageAsBase64(data.image_url);
-    await ensureConnected();
+    await connectQZ();
     const config = buildLabelPrintConfig(printerName, data);
-    await qz.print(config, buildLabelPrintData(imageBase64));
+    await qz.print(config, [
+      { type: "pixel", format: "image", flavor: "base64", data: imageBase64 },
+    ]);
     notify("Test label sent to printer.", "success");
-    return true;
   }
 
   function bindSettingsPage() {
-    const page = document.getElementById("printerSettingsCard");
-    if (!page) {
+    if (!document.getElementById("printerSettingsCard")) {
       return;
     }
-
     const receiptSelect = document.getElementById("receiptPrinterSelect");
     const labelSelect = document.getElementById("labelPrinterSelect");
     const alertEl = document.getElementById("qzPrintAlert");
@@ -302,7 +221,6 @@
 
     document.getElementById("refreshPrintersBtn")?.addEventListener("click", async () => {
       try {
-        showStatus("Loading printers from QZ Tray...", "info");
         await refreshPrinterDropdowns();
         showStatus("Printer list refreshed.", "success");
       } catch (error) {
@@ -329,7 +247,7 @@
     document.getElementById("testReceiptPrintBtn")?.addEventListener("click", async () => {
       try {
         await printTestReceipt();
-        showStatus("Test receipt sent to printer.", "success");
+        showStatus("Test receipt sent.", "success");
       } catch (error) {
         showStatus(error.message, "danger");
       }
@@ -338,7 +256,7 @@
     document.getElementById("testLabelPrintBtn")?.addEventListener("click", async () => {
       try {
         await printTestLabel();
-        showStatus("Test label sent to printer.", "success");
+        showStatus("Test label sent.", "success");
       } catch (error) {
         showStatus(error.message, "danger");
       }
@@ -346,24 +264,20 @@
 
     loadPrinterSettings()
       .then(async (settings) => {
-        document.getElementById("defaultLabelCopies") &&
-          (document.getElementById("defaultLabelCopies").value = settings.default_label_copies || 1);
-        document.getElementById("receiptPaperChars") &&
-          (document.getElementById("receiptPaperChars").value = settings.receipt_paper_chars || 46);
-        document.getElementById("labelWidthMm") &&
-          (document.getElementById("labelWidthMm").value = settings.label_width_mm || 20);
-        document.getElementById("labelHeightMm") &&
-          (document.getElementById("labelHeightMm").value = settings.label_height_mm || 20);
+        const copiesEl = document.getElementById("defaultLabelCopies");
+        const charsEl = document.getElementById("receiptPaperChars");
+        const widthEl = document.getElementById("labelWidthMm");
+        const heightEl = document.getElementById("labelHeightMm");
+        if (copiesEl) copiesEl.value = settings.default_label_copies || 1;
+        if (charsEl) charsEl.value = settings.receipt_paper_chars || 46;
+        if (widthEl) widthEl.value = settings.label_width_mm || 20;
+        if (heightEl) heightEl.value = settings.label_height_mm || 20;
         try {
           await refreshPrinterDropdowns();
-          showStatus("Connected to QZ Tray. Printers loaded.", "success");
         } catch (error) {
-          showStatus(
-            `${error.message} Click Refresh Printers after starting QZ Tray.`,
-            "warning",
-          );
           fillPrinterSelect(receiptSelect, [], settings.receipt_printer_name);
           fillPrinterSelect(labelSelect, [], settings.label_printer_name);
+          showStatus(`${error.message} Start QZ Tray, click Allow, then Refresh printers.`, "warning");
         }
       })
       .catch((error) => showStatus(error.message, "danger"));
@@ -429,9 +343,6 @@
   window.PharmacyQz = {
     connectQZ,
     loadPrinters,
-    loadPrinterSettings,
-    savePrinterSettings,
-    refreshPrinterDropdowns,
     printReceipt,
     printTestReceipt,
     printLabel,

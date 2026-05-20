@@ -72,7 +72,7 @@ python3 manage.py test pharmacy
 - Return entry linked to original invoice
 - Antibiotic register
 - Low-stock and near-expiry reminders
-- Settings for business details, printers (QZ Tray), passwords, and staff accounts
+- Settings for business details, printers, passwords, and staff accounts
 
 ## Media layout
 
