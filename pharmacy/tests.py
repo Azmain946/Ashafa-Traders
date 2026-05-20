@@ -126,20 +126,19 @@ class PharmacyWorkflowTests(TestCase):
         payload = build_label_qr_payload(self.batch)
         self.assertEqual(len(payload), 13)
         self.assertTrue(payload.isdigit())
-        self.assertEqual(int(payload), self.product.pk)
+        self.assertEqual(int(payload), self.batch.pk)
         parsed = parse_label_qr_payload(payload)
-        self.assertEqual(parsed["product_id"], str(self.product.pk))
-
-        preview = self.client.get(reverse("api_batch_qr_png", args=[self.batch.pk]), {"preview": "1"})
-        self.assertEqual(preview.status_code, 200)
-        preview_image = Image.open(BytesIO(preview.content))
-        self.assertEqual(preview_image.size, (50, 50))
+        self.assertEqual(parsed["entry_id"], str(self.batch.pk))
 
         qr_response = self.client.get(reverse("api_batch_qr_png", args=[self.batch.pk]))
         self.assertEqual(qr_response.status_code, 200)
         self.assertEqual(qr_response["Content-Type"], "image/png")
-        print_image = Image.open(BytesIO(qr_response.content))
-        self.assertGreaterEqual(print_image.size[0], 200)
+        qr_image = Image.open(BytesIO(qr_response.content))
+        self.assertEqual(qr_image.size, (50, 50))
+        self.assertEqual(qr_image.mode, "RGB")
+        pixels = list(qr_image.getdata())
+        self.assertIn((0, 0, 0), pixels)
+        self.assertIn((255, 255, 255), pixels)
 
     def test_qz_signing_endpoints(self):
         self.client.force_login(self.user)

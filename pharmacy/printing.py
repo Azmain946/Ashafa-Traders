@@ -12,9 +12,8 @@ from PIL import Image
 from .models import AppSetting, ProductBatch, SalesInvoice
 
 DEFAULT_LINE_CHARS = 46
-QR_PREVIEW_PIXELS = 50
-QR_PRINT_PIXELS = 256
-PRODUCT_QR_DIGITS = 13
+QR_LABEL_PIXELS = 50
+ENTRY_QR_DIGITS = 13
 
 
 def money_label(value) -> str:
@@ -144,68 +143,51 @@ def build_sample_receipt_escpos(app_settings: AppSetting | None = None) -> str:
     )
 
 
-def product_qr_code(product) -> str:
-    """13-digit zero-padded product ID for label QR codes."""
-    return f"{product.pk:0{PRODUCT_QR_DIGITS}d}"
+def entry_qr_code(batch: ProductBatch) -> str:
+    """13-digit zero-padded stock entry (batch) ID for label QR codes."""
+    return f"{batch.pk:0{ENTRY_QR_DIGITS}d}"
 
 
 def build_label_qr_payload(batch: ProductBatch) -> str:
-    return product_qr_code(batch.product)
+    return entry_qr_code(batch)
 
 
 def parse_label_qr_payload(payload: str) -> dict | None:
-    """Parse a label QR string (13-digit product id) back into fields."""
+    """Parse a scanned label QR (13-digit entry / batch id)."""
     text = (payload or "").strip()
     if not text.isdigit():
         return None
-    return {"product_id": str(int(text))}
+    entry_id = str(int(text))
+    return {"entry_id": entry_id, "batch_id": entry_id}
 
 
-def generate_qr_png(batch: ProductBatch, pixel_size: int | None = None, *, for_print: bool = True) -> bytes:
+def generate_qr_png(batch: ProductBatch, pixel_size: int | None = None, **kwargs) -> bytes:
     """
-    Build a sharp 1-bit QR PNG sized for thermal labels.
-    Preview uses 50px; print uses 256px with whole-module scaling (no blur).
+    Build a 50x50 RGB QR PNG (black on white) for one stock entry.
+    Uses standard PNG (not 1-bit) so QZ Tray does not print a solid black box.
     """
-    if pixel_size is None:
-        pixel_size = QR_PRINT_PIXELS if for_print else QR_PREVIEW_PIXELS
-    pixel_size = max(QR_PREVIEW_PIXELS, min(512, int(pixel_size)))
-
+    pixel_size = QR_LABEL_PIXELS
     payload = build_label_qr_payload(batch)
     qr = qrcode.QRCode(
-        version=None,
-        error_correction=qrcode.constants.ERROR_CORRECT_Q,
-        box_size=8,
-        border=4,
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=2,
+        border=2,
     )
     qr.add_data(payload)
     qr.make(fit=True)
-    image = qr.make_image(fill_color=0, back_color=255).convert("L")
-
-    modules = image.size[0]
-    scale = max(1, pixel_size // modules)
-    scaled = modules * scale
-    image = image.resize((scaled, scaled), Image.Resampling.NEAREST)
-    image = image.point(lambda p: 0 if p < 128 else 255, mode="1")
-
-    if scaled < pixel_size:
-        canvas = Image.new("1", (pixel_size, pixel_size), 255)
-        offset = (pixel_size - scaled) // 2
-        canvas.paste(image, (offset, offset))
-        image = canvas
-    elif scaled > pixel_size:
+    image = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+    if image.size != (pixel_size, pixel_size):
         image = image.resize((pixel_size, pixel_size), Image.Resampling.NEAREST)
-
     buffer = BytesIO()
-    image.save(buffer, format="PNG", dpi=(300, 300))
+    image.save(buffer, format="PNG")
     return buffer.getvalue()
 
 
-def qr_image_url_path(batch_id: int, *, preview: bool = False) -> str:
+def qr_image_url_path(batch_id: int, **kwargs) -> str:
     from django.urls import reverse
 
-    if preview:
-        return f"{reverse('api_batch_qr_png', args=[batch_id])}?preview=1"
-    return f"{reverse('api_batch_qr_png', args=[batch_id])}?size={QR_PRINT_PIXELS}"
+    return reverse("api_batch_qr_png", args=[batch_id])
 
 
 def printer_settings_payload(app_settings: AppSetting | None = None) -> dict:
@@ -218,7 +200,7 @@ def printer_settings_payload(app_settings: AppSetting | None = None) -> dict:
         "label_width_mm": settings.label_width_mm,
         "label_height_mm": settings.label_height_mm,
         "store_name": settings.store_name,
-        "qr_print_pixels": QR_PRINT_PIXELS,
+        "qr_label_pixels": QR_LABEL_PIXELS,
     }
 
 
@@ -236,7 +218,8 @@ def label_print_payload(batch: ProductBatch, copies: int | None = None, app_sett
         "batch_number": batch.batch_number,
         "expiry_date": batch.expiry_date.isoformat(),
         "selling_price": str(batch.tp_price),
-        "identifier": product_qr_code(batch.product),
+        "entry_number": entry_qr_code(batch),
+        "identifier": entry_qr_code(batch),
         "qr_payload": build_label_qr_payload(batch),
-        "qr_print_pixels": QR_PRINT_PIXELS,
+        "qr_label_pixels": QR_LABEL_PIXELS,
     }

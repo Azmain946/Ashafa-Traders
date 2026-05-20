@@ -12,8 +12,9 @@
 <body class="barcode-print-body">
   <div class="barcode-print-actions no-print p-3">
     <p class="mb-2"><strong>{{ batch.product.display_name }}</strong> · Batch {{ batch.batch_number }}</p>
-    <img src="{% url 'api_batch_qr_png' batch.pk %}?preview=1" width="50" height="50" alt="QR code">
-    <p class="text-muted small mt-2">Print uses a high-resolution QR for reliable scanning.</p>
+    <p class="text-muted small">Entry number: <strong>{{ entry_number }}</strong></p>
+    <img src="{% url 'api_batch_qr_png' batch.pk %}" width="50" height="50" alt="Entry QR code">
+    <p class="text-muted small mt-2">50×50 px QR — one code per stock entry (price, expiry, batch).</p>
     <div class="d-flex gap-2 mt-3">
       <button type="button" class="btn btn-primary" id="qzPrintLabelBtn" data-batch-id="{{ batch.pk }}" data-label-copies="{{ label_count }}">
         Print with QZ Tray

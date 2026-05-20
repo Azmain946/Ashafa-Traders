@@ -47,10 +47,10 @@ from .models import (
     UserProfile,
 )
 from .printing import (
-    QR_PREVIEW_PIXELS,
-    QR_PRINT_PIXELS,
+    QR_LABEL_PIXELS,
     build_receipt_escpos,
     build_sample_receipt_escpos,
+    entry_qr_code,
     generate_qr_png,
     label_print_payload,
     printer_settings_payload,
@@ -271,6 +271,7 @@ def batch_barcode_print(request, pk):
         "pharmacy/barcode_print.html",
         {
             "batch": batch,
+            "entry_number": entry_qr_code(batch),
             "labels": range(label_count),
             "label_count": label_count,
         },
@@ -806,13 +807,7 @@ def api_print_test_receipt(request):
 @require_GET
 def api_batch_qr_png(request, pk):
     batch = get_object_or_404(ProductBatch.objects.select_related("product"), pk=pk)
-    if request.GET.get("preview") == "1":
-        pixel_size = QR_PREVIEW_PIXELS
-    elif request.GET.get("size"):
-        pixel_size = max(QR_PREVIEW_PIXELS, min(512, int(request.GET.get("size"))))
-    else:
-        pixel_size = QR_PRINT_PIXELS
-    png = generate_qr_png(batch, pixel_size=pixel_size, for_print=pixel_size >= QR_PRINT_PIXELS)
+    png = generate_qr_png(batch)
     response = HttpResponse(png, content_type="image/png")
     response["Cache-Control"] = "no-store"
     return response
@@ -826,9 +821,7 @@ def api_batch_label(request, pk):
     copies_value = int(copies) if copies else None
     app_settings = AppSetting.load()
     payload = label_print_payload(batch, copies=copies_value, app_settings=app_settings)
-    payload["image_url"] = request.build_absolute_uri(
-        reverse("api_batch_qr_png", args=[batch.pk]) + f"?size={QR_PRINT_PIXELS}"
-    )
+    payload["image_url"] = request.build_absolute_uri(reverse("api_batch_qr_png", args=[batch.pk]))
     return JsonResponse(payload)
 
 
@@ -841,7 +834,5 @@ def api_print_test_label(request):
     copies = max(1, int(request.GET.get("copies", 1)))
     app_settings = AppSetting.load()
     payload = label_print_payload(batch, copies=copies, app_settings=app_settings)
-    payload["image_url"] = request.build_absolute_uri(
-        reverse("api_batch_qr_png", args=[batch.pk]) + f"?size={QR_PRINT_PIXELS}"
-    )
+    payload["image_url"] = request.build_absolute_uri(reverse("api_batch_qr_png", args=[batch.pk]))
     return JsonResponse(payload)

@@ -242,9 +242,9 @@
       units: "mm",
       colorType: "grayscale",
       interpolation: "nearest-neighbor",
-      density: 300,
+      density: 203,
       rasterize: true,
-      scaleContent: true,
+      scaleContent: false,
     });
     const payload = [
       {
@@ -271,9 +271,9 @@
       units: "mm",
       colorType: "grayscale",
       interpolation: "nearest-neighbor",
-      density: 300,
+      density: 203,
       rasterize: true,
-      scaleContent: true,
+      scaleContent: false,
     });
     await qz.print(config, [
       {
