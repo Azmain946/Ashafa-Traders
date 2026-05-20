@@ -624,7 +624,8 @@ class UploadedDocument(TimeStampedModel):
     purchase_invoice = models.ForeignKey(PurchaseInvoice, on_delete=models.CASCADE, null=True, blank=True, related_name="documents")
     document_type = models.CharField(max_length=20, choices=DOCUMENT_CHOICES, default=DOCUMENT_RECEIPT)
     title = models.CharField(max_length=180)
-    file = models.FileField(upload_to=receipt_path, validators=[validate_receipt_file])
+    notes = models.TextField(blank=True)
+    file = models.FileField(upload_to=receipt_path, blank=True, null=True, validators=[validate_receipt_file])
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
 
     class Meta:

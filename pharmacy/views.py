@@ -439,12 +439,12 @@ def supplier_detail(request, pk):
     supplier = get_object_or_404(Supplier, pk=pk)
     receipt_form = SupplierReceiptForm(initial={"supplier": supplier})
     if request.method == "POST":
-        receipt_form = SupplierReceiptForm(request.POST, request.FILES)
+        receipt_form = SupplierReceiptForm(request.POST)
         if receipt_form.is_valid():
             receipt = receipt_form.save(commit=False)
             receipt.uploaded_by = request.user
             receipt.save()
-            messages.success(request, "Document uploaded.")
+            messages.success(request, "Supplier memo saved.")
             return redirect("supplier_detail", pk=supplier.pk)
     invoices = supplier.purchase_invoices.prefetch_related("documents").all()
     return render(

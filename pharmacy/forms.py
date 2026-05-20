@@ -278,9 +278,15 @@ class ReturnLookupForm(BootstrapFormMixin, forms.Form):
 
 
 class SupplierReceiptForm(BootstrapFormMixin, forms.ModelForm):
+    notes = forms.CharField(
+        required=False,
+        label="Note (optional)",
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+
     class Meta:
         model = UploadedDocument
-        fields = ["supplier", "purchase_invoice", "document_type", "title", "file"]
+        fields = ["supplier", "purchase_invoice", "document_type", "title", "notes"]
 
 
 class AppSettingForm(BootstrapFormMixin, forms.ModelForm):

@@ -26,7 +26,11 @@
                 <td class="text-danger">{{ invoice.due_amount }}</td>
                 <td>
                   {% for doc in invoice.documents.all %}
-                    <a href="{{ doc.file.url }}" target="_blank" class="badge text-bg-light">{{ doc.title }}</a>
+                    {% if doc.file %}
+                      <a href="{{ doc.file.url }}" target="_blank" class="badge text-bg-light">{{ doc.title }}</a>
+                    {% else %}
+                      <span class="badge text-bg-secondary" title="{{ doc.notes }}">{{ doc.title }}</span>
+                    {% endif %}
                   {% empty %}-{% endfor %}
                 </td>
               </tr>
@@ -41,25 +45,36 @@
       <div class="card-header bg-white"><strong>Supplier documents</strong></div>
       <div class="list-group list-group-flush">
         {% for doc in supplier.documents.all %}
+          {% if doc.file %}
           <a class="list-group-item list-group-item-action d-flex justify-content-between" href="{{ doc.file.url }}" target="_blank">
-            <span>{{ doc.title }} <small class="text-muted">{{ doc.get_document_type_display }}</small></span>
+            <span>{{ doc.title }} <small class="text-muted">{{ doc.get_document_type_display }}</small>{% if doc.notes %}<span class="d-block small text-muted mt-1">{{ doc.notes }}</span>{% endif %}</span>
             <span>{{ doc.created_at|date:"M d, Y" }}</span>
           </a>
+          {% else %}
+          <div class="list-group-item d-flex justify-content-between align-items-start">
+            <div>
+              <strong>{{ doc.title }}</strong> <small class="text-muted">{{ doc.get_document_type_display }}</small>
+              {% if doc.notes %}<div class="small text-muted mt-1">{{ doc.notes|linebreaksbr }}</div>{% endif %}
+            </div>
+            <span class="text-muted small text-nowrap ms-2">{{ doc.created_at|date:"M d, Y" }}</span>
+          </div>
+          {% endif %}
         {% empty %}
-          <div class="text-center text-muted py-4">No documents uploaded.</div>
+          <div class="text-center text-muted py-4">No memos or documents yet.</div>
         {% endfor %}
       </div>
     </div>
   </div>
   <div class="col-xl-4">
-    <form method="post" enctype="multipart/form-data" class="card soft-card">
+    <form method="post" class="card soft-card">
       {% csrf_token %}
       <div class="card-body">
-        <h2 class="h5">Upload receipt / memo</h2>
+        <h2 class="h5">Receipt / memo</h2>
+        <p class="text-muted small">Add a title and optional note (no file upload).</p>
         {% for field in receipt_form %}
           <div class="mb-3">{{ field.label_tag }}{{ field }}{% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</div>
         {% endfor %}
-        <button class="btn btn-primary w-100">Upload document</button>
+        <button class="btn btn-primary w-100">Save memo</button>
       </div>
     </form>
   </div>
