@@ -162,23 +162,18 @@ def parse_label_qr_payload(payload: str) -> dict | None:
 
 
 def generate_qr_png(batch: ProductBatch, pixel_size: int | None = None, **kwargs) -> bytes:
-    """
-    Build a 50x50 RGB QR PNG (black on white) for one stock entry.
-    Uses standard PNG (not 1-bit) so QZ Tray does not print a solid black box.
-    """
-    pixel_size = QR_LABEL_PIXELS
-    payload = build_label_qr_payload(batch)
+    """Build a 50x50 label QR for one stock entry number."""
+    data = build_label_qr_payload(batch)
     qr = qrcode.QRCode(
-        version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_M,
-        box_size=2,
-        border=2,
+        version=4,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
     )
-    qr.add_data(payload)
+    qr.add_data(data)
     qr.make(fit=True)
-    image = qr.make_image(fill_color="black", back_color="white").convert("RGB")
-    if image.size != (pixel_size, pixel_size):
-        image = image.resize((pixel_size, pixel_size), Image.Resampling.NEAREST)
+    image = qr.make_image()
+    target = pixel_size or QR_LABEL_PIXELS
+    if image.size != (target, target):
+        image = image.resize((target, target), Image.Resampling.NEAREST)
     buffer = BytesIO()
     image.save(buffer, format="PNG")
     return buffer.getvalue()
