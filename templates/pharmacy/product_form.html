@@ -8,7 +8,7 @@
     <p>Create a medicine profile before adding stock batches.</p>
   </div>
 </div>
-<form method="post" enctype="multipart/form-data" class="card soft-card" id="productEntryForm">
+<form method="post" class="card soft-card" id="productEntryForm">
   {% csrf_token %}
   <input type="hidden" name="print_barcode" id="printBarcodeInput" value="0">
   <input type="hidden" name="label_count" id="labelCountInput" value="">

@@ -1,7 +1,10 @@
 import json
+import secrets
+import string
 from decimal import Decimal
 
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
@@ -60,6 +63,9 @@ from .services import (
     cart_summary,
     create_order_update_invoice,
     dashboard_metrics,
+    delete_customer_completely,
+    delete_order_completely,
+    delete_product_completely,
     finalize_checkout,
     lookup_return_invoice,
     process_return,
@@ -84,6 +90,29 @@ def can_manage_products(user):
         return True
     profile = getattr(user, "profile", None)
     return getattr(profile, "role", "") in {"admin", "manager"}
+
+
+def can_manage_staff(user):
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if user.is_superuser:
+        return True
+    profile = getattr(user, "profile", None)
+    return getattr(profile, "role", "") == UserProfile.ROLE_ADMIN
+
+
+def _generate_staff_username():
+    alphabet = string.ascii_lowercase + string.digits
+    User = get_user_model()
+    for _ in range(50):
+        candidate = "staff_" + "".join(secrets.choice(alphabet) for _ in range(8))
+        if not User.objects.filter(username=candidate).exists():
+            return candidate
+    return "staff_" + secrets.token_hex(6)
+
+
+def _generate_staff_password():
+    return secrets.token_urlsafe(12)
 
 
 @login_required
@@ -187,7 +216,7 @@ def products(request):
 @user_passes_test(can_manage_products)
 def product_create(request):
     if request.method == "POST":
-        form = ProductEntryForm(request.POST, request.FILES)
+        form = ProductEntryForm(request.POST)
         if form.is_valid():
             product = form.save()
             messages.success(request, "Product created.")
@@ -290,8 +319,15 @@ def product_detail(request, pk):
     adjustment_form = StockAdjustmentForm()
     if request.method == "POST":
         action = request.POST.get("_action")
-        if action == "update_product" and can_manage_products(request.user):
-            product_form = ProductForm(request.POST, request.FILES, instance=product)
+        if action == "delete_product" and request.POST.get("confirm_delete") == "1":
+            try:
+                delete_product_completely(product)
+                messages.success(request, "Product deleted.")
+                return redirect("products")
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+        elif action == "update_product" and can_manage_products(request.user):
+            product_form = ProductForm(request.POST, instance=product)
             if product_form.is_valid():
                 product_form.save()
                 messages.success(request, "Product details updated.")
@@ -366,6 +402,12 @@ def customers(request):
 def customer_detail(request, pk):
     customer = get_object_or_404(Customer, pk=pk)
     orders = customer.orders.all().order_by("-created_at")
+    if request.method == "POST" and request.POST.get("_action") == "delete_customer":
+        if request.POST.get("confirm_delete") == "1":
+            delete_customer_completely(customer)
+            messages.success(request, "Customer and related orders deleted.")
+            return redirect("customers")
+        messages.error(request, "Check the box to confirm customer deletion.")
     return render(request, "pharmacy/customer_detail.html", {"customer": customer, "orders": orders})
 
 
@@ -439,12 +481,19 @@ def order_detail(request, pk):
     order = get_object_or_404(Order.objects.prefetch_related("invoices"), pk=pk)
     form = OrderPaymentForm(instance=order)
     if request.method == "POST":
-        form = OrderPaymentForm(request.POST, instance=order)
-        if form.is_valid():
-            updated_order = form.save()
-            invoice = create_order_update_invoice(updated_order, request.user)
-            messages.success(request, "Order payment details updated and new invoice generated.")
-            return redirect(f"{reverse('invoice_detail', args=[invoice.pk])}?print=1")
+        if request.POST.get("_action") == "delete_order":
+            if request.POST.get("confirm_delete") == "1":
+                delete_order_completely(order)
+                messages.success(request, "Order and linked invoices deleted.")
+                return redirect("invoices")
+            messages.error(request, "Check the box to confirm order deletion.")
+        else:
+            form = OrderPaymentForm(request.POST, instance=order)
+            if form.is_valid():
+                updated_order = form.save()
+                invoice = create_order_update_invoice(updated_order, request.user)
+                messages.success(request, "Order payment details updated and new invoice generated.")
+                return redirect(f"{reverse('invoice_detail', args=[invoice.pk])}?print=1")
     return render(request, "pharmacy/order_detail.html", {"order": order, "form": form})
 
 
@@ -539,11 +588,19 @@ def reminders(request):
 @login_required
 @user_passes_test(lambda u: u.is_staff)
 def settings_page(request):
+    new_staff_credentials = request.session.pop("flash_staff_credentials", None)
     app_settings = AppSetting.load()
     profile, _ = UserProfile.objects.get_or_create(user=request.user)
     setting_form = AppSettingForm(instance=app_settings)
     profile_form = UserProfileForm(instance=profile, user=request.user)
     password_form = StyledPasswordChangeForm(request.user)
+    staff_list = []
+    if can_manage_staff(request.user):
+        staff_list = list(
+            UserProfile.objects.filter(role=UserProfile.ROLE_STAFF)
+            .select_related("user")
+            .order_by("user__username")
+        )
     if request.method == "POST":
         section = request.POST.get("section")
         if section == "business":
@@ -553,7 +610,7 @@ def settings_page(request):
                 messages.success(request, "Business settings updated.")
                 return redirect("settings")
         elif section == "profile":
-            profile_form = UserProfileForm(request.POST, request.FILES, instance=profile, user=request.user)
+            profile_form = UserProfileForm(request.POST, instance=profile, user=request.user)
             if profile_form.is_valid():
                 profile_form.save()
                 messages.success(request, "Profile settings updated.")
@@ -564,6 +621,37 @@ def settings_page(request):
                 password_form.save()
                 messages.success(request, "Password changed. Please log in again if prompted.")
                 return redirect("settings")
+        elif section == "add_staff" and can_manage_staff(request.user):
+            User = get_user_model()
+            username = _generate_staff_username()
+            plain_password = _generate_staff_password()
+            new_user = User.objects.create_user(username=username, password=plain_password, is_staff=True)
+            UserProfile.objects.create(user=new_user, role=UserProfile.ROLE_STAFF)
+            request.session["flash_staff_credentials"] = {"username": username, "password": plain_password}
+            messages.success(
+                request,
+                "Staff account created. Copy the username and password below; they will not be shown again after you leave this page.",
+            )
+            return redirect("settings")
+        elif section == "remove_staff" and can_manage_staff(request.user):
+            User = get_user_model()
+            try:
+                target_id = int(request.POST.get("user_id", "0"))
+            except (TypeError, ValueError):
+                target_id = 0
+            target = get_object_or_404(User, pk=target_id)
+            if target.pk == request.user.pk:
+                messages.error(request, "You cannot remove your own account.")
+            elif target.is_superuser:
+                messages.error(request, "Cannot remove a superuser account.")
+            else:
+                target_profile = getattr(target, "profile", None)
+                if not target_profile or target_profile.role != UserProfile.ROLE_STAFF:
+                    messages.error(request, "Only staff accounts can be removed here.")
+                else:
+                    target.delete()
+                    messages.success(request, "Staff account removed.")
+            return redirect("settings")
     return render(
         request,
         "pharmacy/settings.html",
@@ -572,6 +660,9 @@ def settings_page(request):
             "profile_form": profile_form,
             "password_form": password_form,
             "printer_settings": printer_settings_payload(app_settings),
+            "can_manage_staff": can_manage_staff(request.user),
+            "staff_list": staff_list,
+            "new_staff_credentials": new_staff_credentials,
         },
     )
 

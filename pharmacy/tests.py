@@ -6,8 +6,15 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Order, Product, ProductBatch, ProductCategory, SalesInvoice, StockMovement
-from .services import add_or_update_cart_item, create_order_update_invoice, finalize_checkout, lookup_return_invoice, process_return
+from .models import Order, Product, ProductBatch, ProductCategory, SalesInvoice, StockMovement, UserProfile
+from .services import (
+    add_or_update_cart_item,
+    create_order_update_invoice,
+    delete_order_completely,
+    finalize_checkout,
+    lookup_return_invoice,
+    process_return,
+)
 
 
 class SessionLike(dict):
@@ -195,6 +202,7 @@ class PharmacyWorkflowTests(TestCase):
         self.assertIn(invoice.invoice_number, receipt)
         self.assertIn("Invoice:", receipt)
         self.assertIn("Order ID:", receipt)
+        self.assertNotIn("Discount", receipt)
         self.assertIn("\x1D\x56\x01", receipt)
         api_response = self.client.get(reverse("api_invoice_receipt", args=[invoice.pk]))
         self.assertEqual(api_response.status_code, 200)
@@ -264,3 +272,35 @@ class PharmacyWorkflowTests(TestCase):
         self.assertEqual(new_invoice.items.first().quantity, 4)
         self.batch.refresh_from_db()
         self.assertEqual(self.batch.stock_quantity, 6)
+
+    def test_delete_order_removes_invoices(self):
+        session = SessionLike()
+        session["pending_order_number"] = "2099010103"
+        add_or_update_cart_item(session, self.batch.id, quantity=1)
+        invoice = finalize_checkout(
+            session,
+            {
+                "customer_name": "Delete Me",
+                "customer_phone": "01710000002",
+                "discount_percent": Decimal("0.00"),
+                "discount_amount": Decimal("0.00"),
+                "paid_amount": Decimal("14.00"),
+                "notes": "",
+            },
+            self.user,
+        )
+        order_pk = invoice.order_id
+        delete_order_completely(invoice.order)
+        self.assertFalse(Order.objects.filter(pk=order_pk).exists())
+        self.assertFalse(SalesInvoice.objects.filter(pk=invoice.pk).exists())
+
+    def test_admin_can_add_staff_from_settings(self):
+        admin_user = get_user_model().objects.create_user("adminuser", password="adminpass", is_staff=True)
+        UserProfile.objects.create(user=admin_user, role=UserProfile.ROLE_ADMIN)
+        self.client.force_login(admin_user)
+        response = self.client.post(reverse("settings"), {"section": "add_staff"}, follow=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(get_user_model().objects.exclude(pk=admin_user.pk).filter(is_staff=True).exists())
+        get_response = self.client.get(reverse("settings"))
+        self.assertEqual(get_response.status_code, 200)
+        self.assertContains(get_response, "Staff accounts")

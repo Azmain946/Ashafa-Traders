@@ -95,7 +95,6 @@ def build_receipt_escpos(invoice: SalesInvoice, app_settings: AppSetting | None 
         f"{items_block}\n"
         f"{divider}\n"
         f"{total_line('Subtotal:', money_label(invoice.subtotal), line_chars)}\n"
-        f"{total_line('Discount:', money_label(invoice.discount_amount), line_chars)}\n"
         f"{total_line('Round off:', money_label(invoice.round_off_amount), line_chars)}\n"
         f"{total_line('TOTAL:', money_label(invoice.grand_total), line_chars)}\n"
         f"{total_line('Paid:', money_label(invoice.paid_amount), line_chars)}\n"

@@ -72,7 +72,7 @@
     </form>
   </div>
   <div class="col-xl-4">
-    <form method="post" enctype="multipart/form-data" class="card soft-card">
+    <form method="post" class="card soft-card">
       {% csrf_token %}
       <input type="hidden" name="section" value="profile">
       <div class="card-body">
@@ -97,5 +97,53 @@
       </div>
     </form>
   </div>
+  {% if can_manage_staff %}
+  <div class="col-xl-12">
+    <div class="card soft-card border-primary">
+      <div class="card-body">
+        <h2 class="h5">Staff accounts</h2>
+        <p class="text-muted small">Create login accounts for counter staff. The system assigns username and password once; share them securely. Staff can use the app like others except they cannot add products or edit product master data.</p>
+        {% if new_staff_credentials %}
+          <div class="alert alert-warning" role="alert">
+            <strong>New login</strong><br>
+            Username: <code>{{ new_staff_credentials.username }}</code><br>
+            Password: <code>{{ new_staff_credentials.password }}</code>
+          </div>
+        {% endif %}
+        <form method="post" class="d-inline">
+          {% csrf_token %}
+          <input type="hidden" name="section" value="add_staff">
+          <button type="submit" class="btn btn-primary"><i class="bi bi-person-plus me-1"></i>Add staff (generate login)</button>
+        </form>
+        <div class="table-responsive mt-4">
+          <table class="table align-middle mb-0">
+            <thead><tr><th>Username</th><th></th></tr></thead>
+            <tbody>
+              {% for sp in staff_list %}
+                <tr>
+                  <td>{{ sp.user.username }}</td>
+                  <td class="text-end">
+                    {% if sp.user_id != request.user.id %}
+                    <form method="post" class="d-inline" onsubmit="return confirm('Remove this staff account?');">
+                      {% csrf_token %}
+                      <input type="hidden" name="section" value="remove_staff">
+                      <input type="hidden" name="user_id" value="{{ sp.user_id }}">
+                      <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+                    </form>
+                    {% else %}
+                      <span class="text-muted small">You</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="2" class="text-muted">No staff accounts yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}

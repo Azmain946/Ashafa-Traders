@@ -718,6 +718,35 @@ def reminder_data():
     return {"low_stock_products": low_stock_products, "expiring_batches": expiring_batches, "settings": app_settings}
 
 
+@transaction.atomic
+def delete_order_completely(order):
+    """Delete an order and its invoices (and related return rows)."""
+    for inv in list(order.invoices.all()):
+        ReturnTransaction.objects.filter(invoice=inv).delete()
+        inv.delete()
+    order.delete()
+    cache.delete("dashboard_metrics")
+
+
+@transaction.atomic
+def delete_customer_completely(customer):
+    """Delete a customer after removing all their orders."""
+    for ord_ in list(customer.orders.all()):
+        delete_order_completely(ord_)
+    customer.delete()
+    cache.delete("dashboard_metrics")
+
+
+@transaction.atomic
+def delete_product_completely(product):
+    """Delete a product if it is not referenced by invoice lines."""
+    if SalesInvoiceItem.objects.filter(product=product).exists():
+        raise ValidationError("Cannot delete this product: it appears on sales invoices.")
+    AntibioticRegisterEntry.objects.filter(product=product).delete()
+    product.delete()
+    cache.delete("dashboard_metrics")
+
+
 def search_products(term, limit=8):
     term = (term or "").strip()
     entry_pk = stock_entry_pk_from_query(term)

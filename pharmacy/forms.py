@@ -46,7 +46,6 @@ class ProductForm(BootstrapFormMixin, forms.ModelForm):
             "strength",
             "category",
             "brand",
-            "image",
             "is_antibiotic",
         ]
 
@@ -86,7 +85,6 @@ class ProductEntryForm(BoxPriceMixin, BootstrapFormMixin, forms.ModelForm):
             "strength",
             "category",
             "brand",
-            "image",
             "is_antibiotic",
         ]
 
@@ -307,7 +305,7 @@ class UserProfileForm(BootstrapFormMixin, forms.ModelForm):
 
     class Meta:
         model = UserProfile
-        fields = ["role", "phone", "avatar", "email", "first_name", "last_name"]
+        fields = ["role", "phone", "email", "first_name", "last_name"]
 
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop("user")
@@ -315,6 +313,12 @@ class UserProfileForm(BootstrapFormMixin, forms.ModelForm):
         self.fields["email"].initial = self.user.email
         self.fields["first_name"].initial = self.user.first_name
         self.fields["last_name"].initial = self.user.last_name
+        profile = getattr(self.user, "profile", None)
+        if not (
+            self.user.is_superuser
+            or (profile and getattr(profile, "role", "") == UserProfile.ROLE_ADMIN)
+        ):
+            self.fields.pop("role", None)
 
     def save(self, commit=True):
         profile = super().save(commit=False)
