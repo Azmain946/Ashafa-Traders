@@ -4,29 +4,44 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Print barcode | {{ batch.product.display_name }}</title>
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>Print QR label | {{ batch.product.display_name }}</title>
   <link href="{% static 'vendor/bootstrap/bootstrap.min.css' %}" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
 </head>
 <body class="barcode-print-body">
-  <div class="barcode-print-actions no-print">
-    <button class="btn btn-primary" onclick="window.print()">Print</button>
-    <a class="btn btn-light" href="{% url 'product_detail' batch.product.pk %}">Cancel</a>
+  <div class="barcode-print-actions no-print p-3">
+    <p class="mb-2"><strong>{{ batch.product.display_name }}</strong> · Batch {{ batch.batch_number }}</p>
+    <img src="{% url 'api_batch_qr_png' batch.pk %}" width="50" height="50" alt="QR code">
+    <div class="d-flex gap-2 mt-3">
+      <button type="button" class="btn btn-primary" id="qzPrintLabelBtn" data-batch-id="{{ batch.pk }}" data-label-copies="{{ label_count }}">
+        Print with QZ Tray
+      </button>
+      <a class="btn btn-light" href="{% url 'product_detail' batch.product_id %}">Back</a>
+    </div>
+    <div id="qzPrintAlert" class="alert alert-info mt-3 d-none"></div>
   </div>
-  <main class="barcode-label-grid">
-    {% for _ in labels %}
-      <section class="barcode-label">
-        <strong>{{ batch.product.display_name }}</strong>
-        <span>Batch: {{ batch.batch_number }}</span>
-        <div class="barcode-code">{{ batch.barcode }}</div>
-        <small>EXP {{ batch.expiry_date }} | TP {{ batch.tp_price|floatformat:3 }} | MRP {{ batch.mrp|floatformat:3 }}</small>
-      </section>
-    {% endfor %}
-  </main>
+  <script src="https://cdn.jsdelivr.net/npm/qz-tray/qz-tray.js"></script>
+  <script src="{% static 'js/qz-print.js' %}"></script>
   <script>
-    window.addEventListener("load", function () {
-      window.print();
+    document.getElementById("qzPrintLabelBtn").addEventListener("click", async function () {
+      const alertEl = document.getElementById("qzPrintAlert");
+      try {
+        await PharmacyQz.printLabel(this.dataset.batchId, this.dataset.labelCopies);
+        alertEl.className = "alert alert-success mt-3";
+        alertEl.textContent = "Label sent to printer.";
+        alertEl.classList.remove("d-none");
+      } catch (error) {
+        alertEl.className = "alert alert-danger mt-3";
+        alertEl.textContent = error.message;
+        alertEl.classList.remove("d-none");
+      }
     });
+    {% if request.GET.auto_print %}
+    window.addEventListener("load", function () {
+      document.getElementById("qzPrintLabelBtn").click();
+    });
+    {% endif %}
   </script>
 </body>
 </html>

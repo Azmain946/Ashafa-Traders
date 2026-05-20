@@ -1,3 +1,5 @@
 Django==6.0.5
 Pillow==12.2.0
 psycopg[binary]==3.3.4
+qrcode==8.2
+cryptography==44.0.2

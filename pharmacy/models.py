@@ -643,6 +643,12 @@ class AppSetting(TimeStampedModel):
     near_expiry_days = models.PositiveIntegerField(default=60)
     invoice_footer = models.TextField(default="Thank you for choosing us.")
     print_logo = models.BooleanField(default=True)
+    receipt_printer_name = models.CharField(max_length=255, blank=True)
+    label_printer_name = models.CharField(max_length=255, blank=True)
+    default_label_copies = models.PositiveIntegerField(default=1)
+    receipt_paper_chars = models.PositiveIntegerField(default=46)
+    label_width_mm = models.PositiveIntegerField(default=20)
+    label_height_mm = models.PositiveIntegerField(default=20)
 
     def __str__(self):
         return self.store_name

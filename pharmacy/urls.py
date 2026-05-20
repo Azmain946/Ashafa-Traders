@@ -28,4 +28,13 @@ urlpatterns = [
     path("api/cart/add/", views.api_cart_add, name="api_cart_add"),
     path("api/cart/remove/", views.api_cart_remove, name="api_cart_remove"),
     path("api/dashboard/", views.api_dashboard, name="api_dashboard"),
+    path("api/qz/certificate/", views.api_qz_certificate, name="api_qz_certificate"),
+    path("api/qz/sign/", views.api_qz_sign, name="api_qz_sign"),
+    path("api/printing/settings/", views.api_printer_settings, name="api_printer_settings"),
+    path("api/printing/settings/save/", views.api_printer_settings_save, name="api_printer_settings_save"),
+    path("api/printing/test-receipt/", views.api_print_test_receipt, name="api_print_test_receipt"),
+    path("api/printing/test-label/", views.api_print_test_label, name="api_print_test_label"),
+    path("api/invoices/<int:pk>/receipt/", views.api_invoice_receipt, name="api_invoice_receipt"),
+    path("api/batches/<int:pk>/qr.png", views.api_batch_qr_png, name="api_batch_qr_png"),
+    path("api/batches/<int:pk>/label/", views.api_batch_label, name="api_batch_label"),
 ]

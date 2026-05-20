@@ -7,7 +7,8 @@ from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db.models import DecimalField, Q, Sum
 from django.db.models.functions import Coalesce
-from django.http import JsonResponse
+from django.conf import settings as django_settings
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -44,6 +45,13 @@ from .models import (
     SalesInvoice,
     Supplier,
     UserProfile,
+)
+from .printing import (
+    build_receipt_escpos,
+    build_sample_receipt_escpos,
+    generate_qr_png,
+    label_print_payload,
+    printer_settings_payload,
 )
 from .services import (
     add_or_update_cart_item,
@@ -180,7 +188,9 @@ def product_create(request):
             if request.POST.get("print_barcode") == "1":
                 batch = form.created_batch
                 labels = request.POST.get("label_count") or batch.number_of_boxes
-                return redirect(f"{reverse('batch_barcode_print', args=[batch.pk])}?labels={labels}")
+                return redirect(
+                    f"{reverse('product_detail', args=[product.pk])}?print_label_batch={batch.pk}&labels={labels}"
+                )
             return redirect("product_detail", pk=product.pk)
     else:
         form = ProductEntryForm()
@@ -522,7 +532,12 @@ def settings_page(request):
     return render(
         request,
         "pharmacy/settings.html",
-        {"setting_form": setting_form, "profile_form": profile_form, "password_form": password_form},
+        {
+            "setting_form": setting_form,
+            "profile_form": profile_form,
+            "password_form": password_form,
+            "printer_settings": printer_settings_payload(app_settings),
+        },
     )
 
 
@@ -688,4 +703,133 @@ def cart_payload(summary):
         "count": summary["count"],
     }
 
-# Create your views here.
+
+@login_required
+@require_GET
+def api_qz_certificate(request):
+    cert_path = django_settings.QZ_CERTIFICATE_PATH
+    if not cert_path.exists():
+        return HttpResponse("Certificate not configured.", status=404, content_type="text/plain")
+    return HttpResponse(cert_path.read_text(encoding="utf-8"), content_type="text/plain")
+
+
+@login_required
+@require_GET
+def api_qz_sign(request):
+    to_sign = request.GET.get("request", "")
+    key_path = django_settings.QZ_PRIVATE_KEY_PATH
+    if not to_sign or not key_path.exists():
+        return JsonResponse({"error": "QZ signing is not configured."}, status=503)
+    try:
+        import base64
+
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import padding
+
+        private_key = serialization.load_pem_private_key(key_path.read_bytes(), password=None)
+        signature = private_key.sign(to_sign.encode("utf-8"), padding.PKCS1v15(), hashes.SHA512())
+        return HttpResponse(base64.b64encode(signature).decode("ascii"), content_type="text/plain")
+    except Exception as exc:
+        return JsonResponse({"error": str(exc)}, status=500)
+
+
+@login_required
+@require_GET
+def api_printer_settings(request):
+    return JsonResponse(printer_settings_payload())
+
+
+@login_required
+@require_POST
+def api_printer_settings_save(request):
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON payload."}, status=400)
+    app_settings = AppSetting.load()
+    app_settings.receipt_printer_name = (payload.get("receipt_printer_name") or "").strip()
+    app_settings.label_printer_name = (payload.get("label_printer_name") or "").strip()
+    if "default_label_copies" in payload:
+        app_settings.default_label_copies = max(1, int(payload.get("default_label_copies") or 1))
+    if "receipt_paper_chars" in payload:
+        app_settings.receipt_paper_chars = max(32, min(64, int(payload.get("receipt_paper_chars") or 46)))
+    if "label_width_mm" in payload:
+        app_settings.label_width_mm = max(10, int(payload.get("label_width_mm") or 20))
+    if "label_height_mm" in payload:
+        app_settings.label_height_mm = max(10, int(payload.get("label_height_mm") or 20))
+    app_settings.save(
+        update_fields=[
+            "receipt_printer_name",
+            "label_printer_name",
+            "default_label_copies",
+            "receipt_paper_chars",
+            "label_width_mm",
+            "label_height_mm",
+            "updated_at",
+        ]
+    )
+    return JsonResponse({"ok": True, "settings": printer_settings_payload(app_settings)})
+
+
+@login_required
+@require_GET
+def api_invoice_receipt(request, pk):
+    invoice = get_object_or_404(
+        SalesInvoice.objects.select_related("order").prefetch_related("items"),
+        pk=pk,
+    )
+    app_settings = AppSetting.load()
+    return JsonResponse(
+        {
+            "printer_name": app_settings.receipt_printer_name,
+            "receipt": build_receipt_escpos(invoice, app_settings),
+        }
+    )
+
+
+@login_required
+@require_GET
+def api_print_test_receipt(request):
+    app_settings = AppSetting.load()
+    return JsonResponse(
+        {
+            "printer_name": app_settings.receipt_printer_name,
+            "receipt": build_sample_receipt_escpos(app_settings),
+        }
+    )
+
+
+@login_required
+@never_cache
+@require_GET
+def api_batch_qr_png(request, pk):
+    batch = get_object_or_404(ProductBatch.objects.select_related("product"), pk=pk)
+    png = generate_qr_png(batch)
+    response = HttpResponse(png, content_type="image/png")
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+@login_required
+@require_GET
+def api_batch_label(request, pk):
+    batch = get_object_or_404(ProductBatch.objects.select_related("product"), pk=pk)
+    copies = request.GET.get("copies")
+    copies_value = int(copies) if copies else None
+    app_settings = AppSetting.load()
+    payload = label_print_payload(batch, copies=copies_value, app_settings=app_settings)
+    payload["image_url"] = request.build_absolute_uri(reverse("api_batch_qr_png", args=[batch.pk]))
+    return JsonResponse(payload)
+
+
+@login_required
+@require_GET
+def api_print_test_label(request):
+    batch = ProductBatch.objects.select_related("product").filter(is_active=True).order_by("-created_at").first()
+    if not batch:
+        return JsonResponse({"error": "No batch available for label test."}, status=404)
+    copies = max(1, int(request.GET.get("copies", 1)))
+    app_settings = AppSetting.load()
+    payload = label_print_payload(batch, copies=copies, app_settings=app_settings)
+    payload["image_url"] = request.build_absolute_uri(reverse("api_batch_qr_png", args=[batch.pk]))
+    return JsonResponse(payload)

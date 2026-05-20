@@ -480,7 +480,7 @@
       return false;
     }
     const type = (element.type || "").toLowerCase();
-    if (["hidden", "checkbox", "radio", "button", "submit", "file", "search"].includes(type)) {
+    if (["hidden", "checkbox", "radio", "button", "submit", "file"].includes(type)) {
       return false;
     }
     if (element.readOnly) {

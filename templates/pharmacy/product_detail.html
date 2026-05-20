@@ -74,8 +74,8 @@
                 <td><span class="stock-pill">{{ batch.stock_quantity }}</span></td>
                 <td>{{ batch.shelf_number|default:"-" }}</td>
                 <td>
-                  <button class="btn btn-sm btn-outline-primary" type="button" data-batch-barcode-url="{% url 'batch_barcode_print' batch.pk %}" data-default-labels="{{ batch.number_of_boxes }}">
-                    <i class="bi bi-upc-scan me-1"></i>Barcode
+                  <button class="btn btn-sm btn-outline-primary" type="button" data-batch-label-print="{{ batch.pk }}" data-default-labels="{{ batch.number_of_boxes }}">
+                    <i class="bi bi-qr-code me-1"></i>QR label
                   </button>
                 </td>
                 <td>
@@ -151,11 +151,11 @@
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content soft-modal">
       <div class="modal-header border-0">
-        <h5 class="modal-title">Print barcode labels</h5>
+        <h5 class="modal-title">Print QR labels</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <label class="form-label" for="batchLabelCount">Label</label>
+        <label class="form-label" for="batchLabelCount">Copies</label>
         <input type="number" min="1" class="form-control" id="batchLabelCount" value="1">
       </div>
       <div class="modal-footer border-0">
@@ -166,26 +166,4 @@
   </div>
 </div>
 {% endblock %}
-{% block extra_js %}
-<script>
-  (function () {
-    let printUrl = "";
-    const modalEl = document.getElementById("batchBarcodeDialog");
-    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-    const labelInput = document.getElementById("batchLabelCount");
-
-    document.querySelectorAll("[data-batch-barcode-url]").forEach(function (button) {
-      button.addEventListener("click", function () {
-        printUrl = button.dataset.batchBarcodeUrl;
-        labelInput.value = button.dataset.defaultLabels || "1";
-        modal.show();
-      });
-    });
-
-    document.getElementById("printBatchBarcode").addEventListener("click", function () {
-      const labels = labelInput.value || "1";
-      window.location.href = printUrl + "?labels=" + encodeURIComponent(labels);
-    });
-  })();
-</script>
 {% endblock %}

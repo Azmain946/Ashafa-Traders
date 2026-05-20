@@ -112,12 +112,62 @@ class PharmacyWorkflowTests(TestCase):
         strengths = {item["strength"] for item in response.json()["variants"]}
         self.assertEqual(strengths, {"250mg", "500mg"})
 
-    def test_batch_barcode_print_page_uses_entry_barcode(self):
+    def test_batch_label_page_and_qr_png(self):
         self.client.force_login(self.user)
         response = self.client.get(reverse("batch_barcode_print", args=[self.batch.pk]), {"labels": 2})
         self.assertEqual(response.status_code, 200)
-        self.batch.refresh_from_db()
-        self.assertContains(response, self.batch.barcode)
+        self.assertContains(response, "Print with QZ Tray")
+        qr_response = self.client.get(reverse("api_batch_qr_png", args=[self.batch.pk]))
+        self.assertEqual(qr_response.status_code, 200)
+        self.assertEqual(qr_response["Content-Type"], "image/png")
+        from PIL import Image
+        from io import BytesIO
+
+        image = Image.open(BytesIO(qr_response.content))
+        self.assertEqual(image.size, (50, 50))
+
+    def test_printer_settings_and_receipt_api(self):
+        from pharmacy.models import AppSetting
+        from pharmacy.printing import build_receipt_escpos, item_line
+
+        self.client.force_login(self.user)
+        settings = AppSetting.load()
+        settings.receipt_printer_name = "Receipt-Test"
+        settings.label_printer_name = "Label-Test"
+        settings.save()
+        get_response = self.client.get(reverse("api_printer_settings"))
+        self.assertEqual(get_response.status_code, 200)
+        self.assertEqual(get_response.json()["receipt_printer_name"], "Receipt-Test")
+        save_response = self.client.post(
+            reverse("api_printer_settings_save"),
+            data='{"receipt_printer_name":"POS-80","label_printer_name":"ZD410"}',
+            content_type="application/json",
+        )
+        self.assertEqual(save_response.status_code, 200)
+        self.assertEqual(save_response.json()["settings"]["label_printer_name"], "ZD410")
+        truncated = item_line("Napa Extra Super Long Medicine Name", 12, "999 BDT", "11988 BDT", line_chars=46)
+        self.assertLessEqual(len(truncated), 46)
+        session = SessionLike()
+        session["pending_order_number"] = "2099010102"
+        add_or_update_cart_item(session, self.batch.id, quantity=2, discount_percent=Decimal("0.00"))
+        invoice = finalize_checkout(
+            session,
+            {
+                "customer_name": "Receipt Test",
+                "customer_phone": "01710000001",
+                "discount_percent": Decimal("0.00"),
+                "discount_amount": Decimal("0.00"),
+                "paid_amount": Decimal("50.00"),
+                "notes": "",
+            },
+            self.user,
+        )
+        receipt = build_receipt_escpos(invoice)
+        self.assertIn(invoice.order.order_number, receipt)
+        self.assertIn("\x1D\x56\x01", receipt)
+        api_response = self.client.get(reverse("api_invoice_receipt", args=[invoice.pk]))
+        self.assertEqual(api_response.status_code, 200)
+        self.assertIn("receipt", api_response.json())
 
     def test_product_entry_accepts_optional_category_strength_and_batch_fields(self):
         self.user.is_superuser = True

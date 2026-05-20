@@ -7,7 +7,8 @@
     <h1>{{ invoice.invoice_number }}</h1>
     <p>Printable invoice with item, payment, discount, and due details.</p>
   </div>
-  <button class="btn btn-primary" onclick="window.print()"><i class="bi bi-printer me-1"></i>Print invoice</button>
+  <button type="button" class="btn btn-primary" data-qz-print-receipt="{{ invoice.pk }}"><i class="bi bi-printer me-1"></i>Print receipt</button>
+  <button type="button" class="btn btn-light" onclick="window.print()"><i class="bi bi-file-earmark me-1"></i>Print preview</button>
 </div>
 
 <section class="invoice-sheet">
@@ -67,9 +68,7 @@
 {% block extra_js %}
 {% if request.GET.print %}
 <script>
-  window.addEventListener("load", function () {
-    window.print();
-  });
+  document.body.dataset.autoPrintReceipt = "{{ invoice.pk }}";
 </script>
 {% endif %}
 {% endblock %}

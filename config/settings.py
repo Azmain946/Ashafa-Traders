@@ -150,3 +150,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 APP_LOW_STOCK_DEFAULT = 10
 APP_EXPIRY_ALERT_DAYS_DEFAULT = 60
+
+# Optional QZ Tray signing files (place in static/qz/ for silent printing in production)
+QZ_CERTIFICATE_PATH = BASE_DIR / "static" / "qz" / "digital-certificate.txt"
+QZ_PRIVATE_KEY_PATH = BASE_DIR / "static" / "qz" / "private-key.pem"

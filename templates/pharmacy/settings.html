@@ -5,10 +5,53 @@
   <div>
     <span class="eyebrow">Administration</span>
     <h1>Settings</h1>
-    <p>Manage account, role, business details, invoice print preferences, and thresholds.</p>
+    <p>Manage account, business details, QZ Tray printers, and thresholds.</p>
   </div>
 </div>
 <div class="row g-4">
+  <div class="col-xl-12">
+    <div class="card soft-card" id="printerSettingsCard">
+      <div class="card-body">
+        <h2 class="h5">Thermal printers (QZ Tray)</h2>
+        <p class="text-muted small mb-3">
+          Connect QZ Tray on this computer, choose receipt and label printers, then save. Printing is silent with no browser dialog.
+        </p>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label" for="receiptPrinterSelect">Receipt printer</label>
+            <select class="form-select" id="receiptPrinterSelect"></select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="labelPrinterSelect">Label printer</label>
+            <select class="form-select" id="labelPrinterSelect"></select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" for="defaultLabelCopies">Default label copies</label>
+            <input type="number" min="1" class="form-control" id="defaultLabelCopies" value="{{ printer_settings.default_label_copies }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" for="receiptPaperChars">Receipt width (chars)</label>
+            <input type="number" min="32" max="64" class="form-control" id="receiptPaperChars" value="{{ printer_settings.receipt_paper_chars }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" for="labelWidthMm">Label width (mm)</label>
+            <input type="number" min="10" class="form-control" id="labelWidthMm" value="{{ printer_settings.label_width_mm }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" for="labelHeightMm">Label height (mm)</label>
+            <input type="number" min="10" class="form-control" id="labelHeightMm" value="{{ printer_settings.label_height_mm }}">
+          </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 mt-3">
+          <button type="button" class="btn btn-outline-primary" id="refreshPrintersBtn"><i class="bi bi-arrow-clockwise me-1"></i>Refresh printers</button>
+          <button type="button" class="btn btn-primary" id="savePrinterSettingsBtn"><i class="bi bi-save me-1"></i>Save printer settings</button>
+          <button type="button" class="btn btn-light" id="testReceiptPrintBtn"><i class="bi bi-receipt me-1"></i>Test receipt print</button>
+          <button type="button" class="btn btn-light" id="testLabelPrintBtn"><i class="bi bi-qr-code me-1"></i>Test label print</button>
+        </div>
+        <div id="qzPrintAlert" class="alert alert-info mt-3 d-none" role="alert"></div>
+      </div>
+    </div>
+  </div>
   <div class="col-xl-5">
     <form method="post" class="card soft-card">
       {% csrf_token %}
