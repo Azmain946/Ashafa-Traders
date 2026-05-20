@@ -1,51 +1,34 @@
 """
-Django settings for Ashafa Pharmacy ERP (Railway / PostgreSQL deployment).
+Django settings for config project.
 """
 
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 IN_TESTS = "test" in sys.argv
 
-# --- Security ---
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY",
+    "django-insecure-local-dev-only-change-me",
+)
 
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
-if not SECRET_KEY:
-    if IN_TESTS:
-        SECRET_KEY = "test-secret-key-not-for-production"
-    elif os.environ.get("DJANGO_DEBUG", "0") == "1":
-        SECRET_KEY = "django-insecure-local-dev-only-change-me"
-    else:
-        raise RuntimeError("DJANGO_SECRET_KEY environment variable is required in production.")
+DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 
-DEBUG = os.environ.get("DJANGO_DEBUG", "0" if os.environ.get("DATABASE_URL") else "1") == "1"
+ALLOWED_HOSTS = [
+    h.strip()
+    for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,testserver").split(",")
+    if h.strip()
+]
 
-_railway_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
-_allowed = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if h.strip()]
-if not _allowed:
-    if _railway_domain:
-        _allowed = [_railway_domain, ".up.railway.app", ".railway.app"]
-    else:
-        _allowed = ["localhost", "127.0.0.1", "testserver"]
-ALLOWED_HOSTS = _allowed
-
-_csrf_origins = [o.strip() for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()]
-if not _csrf_origins and _railway_domain:
-    _csrf_origins = [f"https://{_railway_domain}"]
-CSRF_TRUSTED_ORIGINS = _csrf_origins
-
-if not DEBUG:
-    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "1") == "1"
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-
-
-# Application definition
+CSRF_TRUSTED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",")
+    if o.strip()
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -59,7 +42,6 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -88,22 +70,6 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 
 
-# Database — PostgreSQL (Railway DATABASE_URL). SQLite only for `manage.py test`.
-
-def _database_url():
-    url = os.environ.get("DATABASE_URL", "").strip()
-    if url:
-        if url.startswith("postgres://"):
-            url = "postgresql://" + url[len("postgres://") :]
-        return url
-    user = os.environ.get("PGUSER") or os.environ.get("POSTGRES_USER", "postgres")
-    password = os.environ.get("PGPASSWORD") or os.environ.get("POSTGRES_PASSWORD", "postgres")
-    host = os.environ.get("PGHOST") or os.environ.get("POSTGRES_HOST", "localhost")
-    port = os.environ.get("PGPORT") or os.environ.get("POSTGRES_PORT", "5432")
-    name = os.environ.get("PGDATABASE") or os.environ.get("POSTGRES_DB", "pharmacy")
-    return f"postgresql://{user}:{password}@{host}:{port}/{name}"
-
-
 if IN_TESTS:
     DATABASES = {
         "default": {
@@ -112,22 +78,29 @@ if IN_TESTS:
         }
     }
 else:
-    import dj_database_url
+    DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+    if DATABASE_URL:
+        if DATABASE_URL.startswith("postgres://"):
+            DATABASE_URL = "postgresql://" + DATABASE_URL[len("postgres://") :]
+        db_url = urlparse(DATABASE_URL)
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": db_url.path.lstrip("/"),
+                "USER": db_url.username or "",
+                "PASSWORD": db_url.password or "",
+                "HOST": db_url.hostname or "",
+                "PORT": db_url.port or "",
+            }
+        }
+    else:
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.sqlite3",
+                "NAME": BASE_DIR / "db.sqlite3",
+            }
+        }
 
-    db_config = dj_database_url.parse(
-        _database_url(),
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
-    if not DEBUG and os.environ.get("DATABASE_SSL", "1") == "1":
-        db_config.setdefault("OPTIONS", {})
-        db_config["OPTIONS"].setdefault(
-            "sslmode", os.environ.get("PGSSLMODE", "require")
-        )
-    DATABASES = {"default": db_config}
-
-
-# Password validation
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -136,31 +109,16 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-
-# Internationalization
-
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = os.environ.get("DJANGO_TIME_ZONE", "Asia/Dhaka")
 USE_I18N = True
 USE_TZ = True
 
-
-# Static & media
-
-STATIC_URL = "/static/"
+STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-STORAGES = {
-    "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
-    },
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
-    },
-}
-
-MEDIA_URL = "/media/"
+MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 LOGIN_URL = "login"
@@ -174,15 +132,3 @@ APP_EXPIRY_ALERT_DAYS_DEFAULT = 60
 
 QZ_CERTIFICATE_PATH = BASE_DIR / "static" / "qz" / "digital-certificate.txt"
 QZ_PRIVATE_KEY_PATH = BASE_DIR / "static" / "qz" / "private-key.pem"
-
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "handlers": {
-        "console": {"class": "logging.StreamHandler"},
-    },
-    "root": {
-        "handlers": ["console"],
-        "level": os.environ.get("DJANGO_LOG_LEVEL", "INFO"),
-    },
-}
