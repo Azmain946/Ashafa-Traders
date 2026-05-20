@@ -130,13 +130,20 @@ class PharmacyWorkflowTests(TestCase):
         parsed = parse_label_qr_payload(payload)
         self.assertEqual(parsed["entry_id"], str(self.batch.pk))
 
-        qr_response = self.client.get(reverse("api_batch_qr_png", args=[self.batch.pk]))
+        preview = self.client.get(reverse("api_batch_qr_png", args=[self.batch.pk]), {"preview": "1"})
+        self.assertEqual(preview.status_code, 200)
+        preview_image = Image.open(BytesIO(preview.content))
+        self.assertEqual(preview_image.size, (50, 50))
+        self.assertEqual(preview_image.mode, "RGB")
+
+        qr_response = self.client.get(reverse("api_batch_qr_png", args=[self.batch.pk]), {"print": "1"})
         self.assertEqual(qr_response.status_code, 200)
-        self.assertEqual(qr_response["Content-Type"], "image/png")
         qr_image = Image.open(BytesIO(qr_response.content))
-        self.assertEqual(qr_image.size, (50, 50))
+        self.assertEqual(qr_image.size, (200, 200))
+        self.assertEqual(qr_image.mode, "RGB")
         pixels = set(qr_image.getdata())
-        self.assertTrue(pixels & {0, 1} or pixels & {(0, 0, 0), (255, 255, 255)})
+        self.assertIn((0, 0, 0), pixels)
+        self.assertIn((255, 255, 255), pixels)
 
     def test_qz_signing_endpoints(self):
         self.client.force_login(self.user)

@@ -47,7 +47,6 @@ from .models import (
     UserProfile,
 )
 from .printing import (
-    QR_LABEL_PIXELS,
     build_receipt_escpos,
     build_sample_receipt_escpos,
     entry_qr_code,
@@ -807,7 +806,8 @@ def api_print_test_receipt(request):
 @require_GET
 def api_batch_qr_png(request, pk):
     batch = get_object_or_404(ProductBatch.objects.select_related("product"), pk=pk)
-    png = generate_qr_png(batch)
+    for_print = request.GET.get("print") == "1" or request.GET.get("preview") != "1"
+    png = generate_qr_png(batch, for_print=for_print)
     response = HttpResponse(png, content_type="image/png")
     response["Cache-Control"] = "no-store"
     return response
@@ -821,7 +821,9 @@ def api_batch_label(request, pk):
     copies_value = int(copies) if copies else None
     app_settings = AppSetting.load()
     payload = label_print_payload(batch, copies=copies_value, app_settings=app_settings)
-    payload["image_url"] = request.build_absolute_uri(reverse("api_batch_qr_png", args=[batch.pk]))
+    payload["image_url"] = request.build_absolute_uri(
+        reverse("api_batch_qr_png", args=[batch.pk]) + "?print=1"
+    )
     return JsonResponse(payload)
 
 
@@ -834,5 +836,7 @@ def api_print_test_label(request):
     copies = max(1, int(request.GET.get("copies", 1)))
     app_settings = AppSetting.load()
     payload = label_print_payload(batch, copies=copies, app_settings=app_settings)
-    payload["image_url"] = request.build_absolute_uri(reverse("api_batch_qr_png", args=[batch.pk]))
+    payload["image_url"] = request.build_absolute_uri(
+        reverse("api_batch_qr_png", args=[batch.pk]) + "?print=1"
+    )
     return JsonResponse(payload)

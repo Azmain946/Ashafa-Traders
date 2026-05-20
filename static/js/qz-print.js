@@ -230,23 +230,27 @@
     });
   }
 
-  async function printLabel(batchId, copies) {
-    const query = copies ? `?copies=${encodeURIComponent(copies)}` : "";
-    const data = await fetchJson(`/api/batches/${batchId}/label/${query}`);
-    const printerName = await resolveLabelPrinter(data.label_printer_name);
-    const imageBase64 = await fetchImageAsBase64(data.image_url);
-    await ensureConnected();
-    const config = qz.configs.create(printerName, {
+  function buildLabelPrintConfig(printerName, data) {
+    const printPx = Number(data.qr_print_pixels || 200);
+    const labelMm = Number(data.label_width_mm || 20);
+    return qz.configs.create(printerName, {
       copies: Number(data.copies || 1),
-      size: { width: Number(data.label_width_mm || 20), height: Number(data.label_height_mm || 20) },
+      size: { width: labelMm, height: Number(data.label_height_mm || labelMm) },
       units: "mm",
       colorType: "grayscale",
       interpolation: "nearest-neighbor",
       density: 203,
       rasterize: true,
-      scaleContent: false,
+      scaleContent: true,
+      altPrinting: false,
     });
-    const payload = [
+  }
+
+  function buildLabelPrintData(imageBase64) {
+    if (!imageBase64 || imageBase64.length < 80) {
+      throw new Error("QR image data is empty. Check /api/batches/<id>/qr.png?print=1");
+    }
+    return [
       {
         type: "pixel",
         format: "image",
@@ -254,7 +258,16 @@
         data: imageBase64,
       },
     ];
-    await qz.print(config, payload);
+  }
+
+  async function printLabel(batchId, copies) {
+    const query = copies ? `?copies=${encodeURIComponent(copies)}` : "";
+    const data = await fetchJson(`/api/batches/${batchId}/label/${query}`);
+    const printerName = await resolveLabelPrinter(data.label_printer_name);
+    const imageBase64 = await fetchImageAsBase64(data.image_url);
+    await ensureConnected();
+    const config = buildLabelPrintConfig(printerName, data);
+    await qz.print(config, buildLabelPrintData(imageBase64));
     notify(`Label sent to printer (${data.copies} cop${data.copies === 1 ? "y" : "ies"}).`, "success");
     return true;
   }
@@ -265,24 +278,8 @@
     const printerName = await resolveLabelPrinter(data.label_printer_name);
     const imageBase64 = await fetchImageAsBase64(data.image_url);
     await ensureConnected();
-    const config = qz.configs.create(printerName, {
-      copies: Number(data.copies || 1),
-      size: { width: Number(data.label_width_mm || 20), height: Number(data.label_height_mm || 20) },
-      units: "mm",
-      colorType: "grayscale",
-      interpolation: "nearest-neighbor",
-      density: 203,
-      rasterize: true,
-      scaleContent: false,
-    });
-    await qz.print(config, [
-      {
-        type: "pixel",
-        format: "image",
-        flavor: "base64",
-        data: imageBase64,
-      },
-    ]);
+    const config = buildLabelPrintConfig(printerName, data);
+    await qz.print(config, buildLabelPrintData(imageBase64));
     notify("Test label sent to printer.", "success");
     return true;
   }
