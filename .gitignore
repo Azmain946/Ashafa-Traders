@@ -5,7 +5,8 @@ db.sqlite3
 .env
 .venv/
 venv/
-staticfiles/
+staticfiles/*
+!staticfiles/.gitkeep
 media/*
 !media/.gitkeep
 !media/products/
