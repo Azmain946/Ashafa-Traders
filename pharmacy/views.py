@@ -68,6 +68,7 @@ from .services import (
     reserve_order_number,
     resolve_return_invoice,
     search_products,
+    stock_entry_pk_from_query,
 )
 
 
@@ -158,13 +159,17 @@ def products(request):
         selected_category = get_object_or_404(ProductCategory, pk=category_id)
         qs = qs.filter(category=selected_category)
     if query:
-        qs = qs.filter(
-            Q(name__icontains=query)
-            | Q(generic_name__icontains=query)
-            | Q(barcode__icontains=query)
-            | Q(batches__batch_number__icontains=query)
-            | Q(batches__barcode__icontains=query)
-        ).distinct()
+        entry_pk = stock_entry_pk_from_query(query)
+        if entry_pk is not None:
+            qs = qs.filter(batches__pk=entry_pk).distinct()
+        else:
+            qs = qs.filter(
+                Q(name__icontains=query)
+                | Q(generic_name__icontains=query)
+                | Q(barcode__icontains=query)
+                | Q(batches__batch_number__icontains=query)
+                | Q(batches__barcode__icontains=query)
+            ).distinct()
     return render(
         request,
         "pharmacy/products.html",
@@ -336,7 +341,16 @@ def customers(request):
         total_paid_value=Coalesce(Sum("orders__paid_amount"), Decimal("0.00"), output_field=DecimalField()),
     )
     if query:
-        qs = qs.filter(Q(name__icontains=query) | Q(phone__icontains=query) | Q(customer_code__icontains=query))
+        entry_pk = stock_entry_pk_from_query(query)
+        if entry_pk is not None:
+            qs = qs.filter(
+                Q(name__icontains=query)
+                | Q(phone__icontains=query)
+                | Q(customer_code__icontains=query)
+                | Q(orders__invoices__items__product_batch_id=entry_pk)
+            ).distinct()
+        else:
+            qs = qs.filter(Q(name__icontains=query) | Q(phone__icontains=query) | Q(customer_code__icontains=query))
     sort_map = {
         "newest": "-created_at",
         "bought": "-total_bought_value",
@@ -403,11 +417,20 @@ def invoices(request):
     query = request.GET.get("q", "").strip()
     qs = Order.objects.select_related("customer").order_by("-created_at")
     if query:
-        qs = qs.filter(
-            Q(order_number__icontains=query)
-            | Q(customer_name__icontains=query)
-            | Q(customer_phone__icontains=query)
-        )
+        entry_pk = stock_entry_pk_from_query(query)
+        if entry_pk is not None:
+            qs = qs.filter(
+                Q(order_number__icontains=query)
+                | Q(customer_name__icontains=query)
+                | Q(customer_phone__icontains=query)
+                | Q(invoices__items__product_batch_id=entry_pk)
+            ).distinct()
+        else:
+            qs = qs.filter(
+                Q(order_number__icontains=query)
+                | Q(customer_name__icontains=query)
+                | Q(customer_phone__icontains=query)
+            )
     return render(request, "pharmacy/invoices.html", {"page_obj": paginate(request, qs), "query": query})
 
 
@@ -489,12 +512,22 @@ def antibiotic_registers(request):
     query = request.GET.get("q", "").strip()
     qs = AntibioticRegisterEntry.objects.select_related("customer", "product", "invoice", "invoice__order").order_by("-sale_date")
     if query:
-        qs = qs.filter(
-            Q(customer__name__icontains=query)
-            | Q(product__name__icontains=query)
-            | Q(invoice__invoice_number__icontains=query)
-            | Q(invoice__order__order_number__icontains=query)
-        )
+        entry_pk = stock_entry_pk_from_query(query)
+        if entry_pk is not None:
+            qs = qs.filter(
+                Q(customer__name__icontains=query)
+                | Q(product__name__icontains=query)
+                | Q(invoice__invoice_number__icontains=query)
+                | Q(invoice__order__order_number__icontains=query)
+                | Q(invoice__items__product_batch_id=entry_pk)
+            ).distinct()
+        else:
+            qs = qs.filter(
+                Q(customer__name__icontains=query)
+                | Q(product__name__icontains=query)
+                | Q(invoice__invoice_number__icontains=query)
+                | Q(invoice__order__order_number__icontains=query)
+            )
     return render(request, "pharmacy/antibiotic_registers.html", {"page_obj": paginate(request, qs), "query": query})
 
 

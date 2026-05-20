@@ -5,7 +5,7 @@
   <div>
     <span class="eyebrow">Action center</span>
     <h1>Reminders</h1>
-    <p>Low stock (at or below 20% of latest entry) and medicines expiring within 30 days.</p>
+    <p>Low stock when total units across all batches are at or below each product reorder level. Expiry within 30 days.</p>
   </div>
 </div>
 <div class="row g-4">
@@ -14,13 +14,13 @@
       <div class="card-header bg-white"><strong><i class="bi bi-exclamation-triangle me-2 text-warning"></i>Low stock medicines</strong></div>
       <div class="table-responsive">
         <table class="table align-middle mb-0">
-          <thead><tr><th>Medicine</th><th>Stock</th><th>20% of latest entry</th><th></th></tr></thead>
+          <thead><tr><th>Medicine</th><th>Total stock</th><th>Reorder level</th><th></th></tr></thead>
           <tbody>
             {% for product in low_stock_products %}
               <tr>
                 <td>{{ product.display_name }}</td>
                 <td><span class="badge text-bg-warning">{{ product.total }}</span></td>
-                <td>{{ product.low_stock_threshold }}</td>
+                <td>{{ product.reorder_level }}</td>
                 <td class="text-end"><a class="btn btn-sm btn-light" href="{% url 'product_detail' product.pk %}">Restock</a></td>
               </tr>
             {% empty %}

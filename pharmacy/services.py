@@ -6,7 +6,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Count, DecimalField, ExpressionWrapper, F, IntegerField, OuterRef, Q, Subquery, Sum
+from django.db.models import Count, DecimalField, F, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce, TruncMonth
 from django.utils import timezone
 
@@ -31,6 +31,17 @@ from .models import (
 
 MONEY = Decimal("0.01")
 UNIT_MONEY = Decimal("0.00000001")
+
+# Padded stock entry (ProductBatch.pk) length used in QR labels and search
+STOCK_ENTRY_NUMBER_MAX_LEN = 13
+
+
+def stock_entry_pk_from_query(term):
+    """If term is a 10–13 digit stock entry number, return ProductBatch.pk; else None."""
+    t = (term or "").strip()
+    if not t.isdigit() or len(t) < 10 or len(t) > STOCK_ENTRY_NUMBER_MAX_LEN:
+        return None
+    return int(t)
 
 
 def money(value):
@@ -390,6 +401,18 @@ def lookup_return_invoice(invoice_number=None, phone=None, invoice_date=None):
     )
     if invoice_number:
         lookup_value = invoice_number.strip()
+        entry_pk = stock_entry_pk_from_query(lookup_value)
+        if entry_pk is not None:
+            invoice_ids = (
+                SalesInvoiceItem.objects.filter(product_batch_id=entry_pk)
+                .values_list("invoice_id", flat=True)
+                .distinct()
+                .order_by("-invoice_id")
+            )
+            for iid in invoice_ids:
+                hit = base_qs.filter(pk=iid).first()
+                if hit:
+                    return hit
         order = Order.objects.filter(order_number__iexact=lookup_value).first()
         if order:
             invoice = base_qs.filter(Q(order=order) | Q(invoice_number__startswith=order.order_number)).first()
@@ -675,23 +698,10 @@ def reminder_data():
     app_settings = AppSetting.load()
     today = timezone.localdate()
     expiry_cutoff = today + timedelta(days=30)
-    latest_entry_units = (
-        ProductBatch.objects.filter(product_id=OuterRef("pk"), is_active=True)
-        .order_by("-created_at")
-        .annotate(entry_units=F("number_of_boxes") * F("units_per_box"))
-        .values("entry_units")[:1]
-    )
     low_stock_products = (
         Product.objects.filter(is_active=True)
-        .annotate(
-            total=Coalesce(Sum("batches__stock_quantity"), 0),
-            latest_entry_units=Subquery(latest_entry_units, output_field=IntegerField()),
-            low_stock_threshold=ExpressionWrapper(
-                F("latest_entry_units") * 20 / 100,
-                output_field=IntegerField(),
-            ),
-        )
-        .filter(latest_entry_units__gt=0, total__lte=F("low_stock_threshold"))
+        .annotate(total=Coalesce(Sum("batches__stock_quantity"), 0))
+        .filter(total__lte=F("reorder_level"))
         .select_related("category", "brand")
         .order_by("total", "name")
     )
@@ -710,6 +720,30 @@ def reminder_data():
 
 def search_products(term, limit=8):
     term = (term or "").strip()
+    entry_pk = stock_entry_pk_from_query(term)
+    if entry_pk is not None:
+        return (
+            ProductBatch.objects.filter(pk=entry_pk, is_active=True)
+            .select_related("product", "product__brand")
+            .only(
+                "id",
+                "batch_number",
+                "barcode",
+                "expiry_date",
+                "stock_quantity",
+                "tp_price",
+                "mrp",
+                "product__id",
+                "product__name",
+                "product__generic_name",
+                "product__strength",
+                "product__thumbnail",
+                "product__image",
+                "product__barcode",
+                "product__brand__name",
+            )
+            .order_by("product__name", "expiry_date")[:limit]
+        )
     if len(term) < 2:
         return ProductBatch.objects.none()
     return (

@@ -461,6 +461,17 @@
 
   updateCheckoutPreview();
 
+  const quickAddPercentEl = document.getElementById("quickAddPercent");
+  if (quickAddPercentEl) {
+    quickAddPercentEl.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        document.getElementById("quickSaveProduct")?.click();
+      }
+    });
+  }
+
   function isProductImageField(element) {
     return element && element.name === "image" && element.type === "file";
   }

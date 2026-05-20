@@ -49,7 +49,7 @@ def build_receipt_escpos(invoice: SalesInvoice, app_settings: AppSetting | None 
     """Build ESC/POS plain-text receipt using the project's alignment rules."""
     settings = app_settings or AppSetting.load()
     line_chars = settings.receipt_paper_chars or DEFAULT_LINE_CHARS
-    order_ref = invoice.order.order_number if invoice.order_id else invoice.invoice_number
+    order_ref = invoice.order.order_number if invoice.order_id else "-"
     customer = invoice.customer_name or "Walk-in Customer"
     phone = invoice.customer_phone or ""
 
@@ -79,10 +79,10 @@ def build_receipt_escpos(invoice: SalesInvoice, app_settings: AppSetting | None 
         f"{settings.store_name}\r\n"
         f"{settings.store_address or ''}\r\n"
         f"Phone No: {settings.store_phone}\r\n"
+        f"Invoice: {invoice.invoice_number}\r\n"
+        f"Order ID: {order_ref}\r\n"
         "\r\n"
         "\x1B\x61\x00"
-        f"Order ID: {order_ref}\n"
-        f"Invoice: {invoice.invoice_number}\n"
         f"Date: {_format_datetime(invoice)}\n"
         f"Customer: {customer}\n"
     )
@@ -122,9 +122,10 @@ def build_sample_receipt_escpos(app_settings: AppSetting | None = None) -> str:
         f"{settings.store_name}\r\n"
         f"{settings.store_address or 'Nangra Bazar, Bogura'}\r\n"
         f"Phone No: {settings.store_phone or '01734-356060'}\r\n"
+        "Invoice: TEST-INV-001\r\n"
+        "Order ID: TEST-ORDER\r\n"
         "\r\n"
         "\x1B\x61\x00"
-        "Order ID: TEST-RECEIPT\n"
         f"Date: {timezone.localtime().strftime('%Y-%m-%d %I:%M %p')}\n"
         f"{divider}\n"
         f"{'Items'.ljust(line_chars - len('Qty x Price'))}Qty x Price\n"
