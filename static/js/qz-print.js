@@ -1,6 +1,6 @@
 /**
  * QZ Tray silent printing for Ashafa Pharmacy ERP.
- * Receipt: ESC/POS raw. Labels: 50x50 QR raster.
+ * Receipt: ESC/POS raw. Labels: high-res QR raster for thermal printers.
  */
 (function () {
   "use strict";
@@ -50,17 +50,24 @@
       const certResponse = await fetch("/api/qz/certificate/", { cache: "no-store", credentials: "same-origin" });
       if (certResponse.ok) {
         const certificate = await certResponse.text();
-        qz.security.setCertificatePromise(function (resolve) {
-          resolve(certificate);
+        qz.security.setCertificatePromise(function (resolve, reject) {
+          if (certificate && certificate.includes("BEGIN CERTIFICATE")) {
+            resolve(certificate);
+          } else {
+            reject(new Error("Invalid QZ certificate file."));
+          }
         });
         qz.security.setSignaturePromise(function (toSign) {
           return function (resolve, reject) {
             fetch(`/api/qz/sign/?request=${encodeURIComponent(toSign)}`, {
               credentials: "same-origin",
+              cache: "no-store",
             })
               .then((response) => {
                 if (!response.ok) {
-                  throw new Error("Signing unavailable");
+                  return response.json().then((body) => {
+                    throw new Error(body.error || "Signing failed");
+                  });
                 }
                 return response.text();
               })
@@ -68,9 +75,12 @@
               .catch(reject);
           };
         });
+        console.info("QZ Tray signing enabled for silent printing.");
+      } else {
+        console.warn("QZ certificate endpoint returned", certResponse.status);
       }
     } catch (error) {
-      console.warn("QZ certificate not configured; using unsigned mode if allowed by QZ Tray.", error);
+      console.warn("QZ signing setup failed:", error);
     }
     securityConfigured = true;
   }
@@ -232,8 +242,9 @@
       units: "mm",
       colorType: "grayscale",
       interpolation: "nearest-neighbor",
-      density: 203,
+      density: 300,
       rasterize: true,
+      scaleContent: true,
     });
     const payload = [
       {
@@ -260,8 +271,9 @@
       units: "mm",
       colorType: "grayscale",
       interpolation: "nearest-neighbor",
-      density: 203,
+      density: 300,
       rasterize: true,
+      scaleContent: true,
     });
     await qz.print(config, [
       {

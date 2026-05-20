@@ -117,14 +117,36 @@ class PharmacyWorkflowTests(TestCase):
         response = self.client.get(reverse("batch_barcode_print", args=[self.batch.pk]), {"labels": 2})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Print with QZ Tray")
+        from io import BytesIO
+
+        from PIL import Image
+
+        from pharmacy.printing import build_label_qr_payload, parse_label_qr_payload
+
+        payload = build_label_qr_payload(self.batch)
+        self.assertLess(len(payload), 120)
+        parsed = parse_label_qr_payload(payload)
+        self.assertEqual(parsed["identifier"], self.batch.barcode)
+
+        preview = self.client.get(reverse("api_batch_qr_png", args=[self.batch.pk]), {"preview": "1"})
+        self.assertEqual(preview.status_code, 200)
+        preview_image = Image.open(BytesIO(preview.content))
+        self.assertEqual(preview_image.size, (50, 50))
+
         qr_response = self.client.get(reverse("api_batch_qr_png", args=[self.batch.pk]))
         self.assertEqual(qr_response.status_code, 200)
         self.assertEqual(qr_response["Content-Type"], "image/png")
-        from PIL import Image
-        from io import BytesIO
+        print_image = Image.open(BytesIO(qr_response.content))
+        self.assertGreaterEqual(print_image.size[0], 200)
 
-        image = Image.open(BytesIO(qr_response.content))
-        self.assertEqual(image.size, (50, 50))
+    def test_qz_signing_endpoints(self):
+        self.client.force_login(self.user)
+        cert = self.client.get(reverse("api_qz_certificate"))
+        self.assertEqual(cert.status_code, 200)
+        self.assertIn("BEGIN CERTIFICATE", cert.content.decode())
+        sign = self.client.get(reverse("api_qz_sign"), {"request": "test-message"})
+        self.assertEqual(sign.status_code, 200)
+        self.assertGreater(len(sign.content), 20)
 
     def test_printer_settings_and_receipt_api(self):
         from pharmacy.models import AppSetting

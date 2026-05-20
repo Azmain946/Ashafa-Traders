@@ -1,10 +1,26 @@
-Optional QZ Tray signing files for production silent printing:
+QZ Tray signing files for Ashafa Pharmacy ERP silent printing
+================================================================
 
-1. Generate a certificate/key pair with QZ Tray (Site Manager).
-2. Place files here:
-   - digital-certificate.txt
-   - private-key.pem
+Files in this folder:
+  - digital-certificate.txt   Public certificate (served at /api/qz/certificate/)
+  - private-key.pem           Private key (used by /api/qz/sign/ — keep secure)
 
-The ERP exposes /api/qz/certificate/ and /api/qz/sign/ when these files exist.
+One-time setup on each pharmacy PC
+----------------------------------
+1. Install and start QZ Tray (https://qz.io/download/).
+2. Open QZ Tray > Advanced > Site Manager.
+3. Click + (Add) and browse to this folder's digital-certificate.txt.
+4. Set Trust to "Trusted" and save.
+5. Add your ERP URL (e.g. http://localhost:8000 or https://your-server) as Allowed.
 
-Without signing, enable "Allow unsigned requests" in QZ Tray for local development.
+The web app loads the certificate automatically and signs print requests.
+
+Regenerating keys (optional)
+----------------------------
+  openssl req -x509 -newkey rsa:2048 -nodes \
+    -keyout private-key.pem \
+    -out digital-certificate.txt \
+    -days 825 \
+    -subj "/CN=Ashafa Traders Pharmacy/O=Ashafa Traders/C=BD"
+
+After regenerating, re-import digital-certificate.txt in QZ Site Manager.

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import json
+import re
 from decimal import Decimal
 from io import BytesIO
 
@@ -13,7 +13,8 @@ from PIL import Image
 from .models import AppSetting, ProductBatch, SalesInvoice
 
 DEFAULT_LINE_CHARS = 46
-QR_PIXEL_SIZE = 50
+QR_PREVIEW_PIXELS = 50
+QR_PRINT_PIXELS = 256
 
 
 def money_label(value) -> str:
@@ -144,34 +145,84 @@ def build_sample_receipt_escpos(app_settings: AppSetting | None = None) -> str:
 
 
 def build_label_qr_payload(batch: ProductBatch) -> str:
+    """
+  Compact QR payload for reliable thermal scanning.
+  Format: {identifier}|P{product_id}|{batch}|{expiry_yymmdd}|{tp_price}|{short_name}
+  """
     product = batch.product
-    payload = {
-        "product_id": product.id,
-        "product_name": product.display_name,
-        "batch": batch.batch_number,
-        "expiry": batch.expiry_date.isoformat(),
-        "selling_price": str(batch.tp_price),
-        "identifier": batch.barcode or f"BATCH-{batch.id}",
-        "sku": product.barcode or "",
+    identifier = batch.barcode or f"B{batch.id}"
+    name = re.sub(r"[|\r\n]+", " ", (product.name or "Medicine"))[:20].strip()
+    price = Decimal(batch.tp_price).quantize(Decimal("0.01"))
+    batch_no = re.sub(r"[|\r\n]+", " ", batch.batch_number or "-")[:24]
+    return f"{identifier}|P{product.id}|{batch_no}|{batch.expiry_date:%y%m%d}|{price}|{name}"
+
+
+def parse_label_qr_payload(payload: str) -> dict | None:
+    """Parse a label QR string back into structured fields."""
+    text = (payload or "").strip()
+    if not text:
+        return None
+    parts = text.split("|")
+    if len(parts) < 4:
+        return {"identifier": text}
+    result = {
+        "identifier": parts[0],
+        "product_id": parts[1][1:] if parts[1].startswith("P") else parts[1],
+        "batch_number": parts[2],
+        "expiry_yymmdd": parts[3],
     }
-    return json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+    if len(parts) > 4:
+        result["selling_price"] = parts[4]
+    if len(parts) > 5:
+        result["product_name"] = parts[5]
+    return result
 
 
-def generate_qr_png(batch: ProductBatch, size: int = QR_PIXEL_SIZE) -> bytes:
+def generate_qr_png(batch: ProductBatch, pixel_size: int | None = None, *, for_print: bool = True) -> bytes:
+    """
+    Build a sharp 1-bit QR PNG sized for thermal labels.
+    Preview uses 50px; print uses 256px with whole-module scaling (no blur).
+    """
+    if pixel_size is None:
+        pixel_size = QR_PRINT_PIXELS if for_print else QR_PREVIEW_PIXELS
+    pixel_size = max(QR_PREVIEW_PIXELS, min(512, int(pixel_size)))
+
     payload = build_label_qr_payload(batch)
     qr = qrcode.QRCode(
         version=None,
-        error_correction=qrcode.constants.ERROR_CORRECT_M,
-        box_size=1,
-        border=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_Q,
+        box_size=8,
+        border=4,
     )
     qr.add_data(payload)
     qr.make(fit=True)
-    image = qr.make_image(fill_color="black", back_color="white").convert("RGB")
-    image = image.resize((size, size), Image.Resampling.NEAREST)
+    image = qr.make_image(fill_color=0, back_color=255).convert("L")
+
+    modules = image.size[0]
+    scale = max(1, pixel_size // modules)
+    scaled = modules * scale
+    image = image.resize((scaled, scaled), Image.Resampling.NEAREST)
+    image = image.point(lambda p: 0 if p < 128 else 255, mode="1")
+
+    if scaled < pixel_size:
+        canvas = Image.new("1", (pixel_size, pixel_size), 255)
+        offset = (pixel_size - scaled) // 2
+        canvas.paste(image, (offset, offset))
+        image = canvas
+    elif scaled > pixel_size:
+        image = image.resize((pixel_size, pixel_size), Image.Resampling.NEAREST)
+
     buffer = BytesIO()
-    image.save(buffer, format="PNG", optimize=True)
+    image.save(buffer, format="PNG", dpi=(300, 300))
     return buffer.getvalue()
+
+
+def qr_image_url_path(batch_id: int, *, preview: bool = False) -> str:
+    from django.urls import reverse
+
+    if preview:
+        return f"{reverse('api_batch_qr_png', args=[batch_id])}?preview=1"
+    return f"{reverse('api_batch_qr_png', args=[batch_id])}?size={QR_PRINT_PIXELS}"
 
 
 def printer_settings_payload(app_settings: AppSetting | None = None) -> dict:
@@ -184,6 +235,7 @@ def printer_settings_payload(app_settings: AppSetting | None = None) -> dict:
         "label_width_mm": settings.label_width_mm,
         "label_height_mm": settings.label_height_mm,
         "store_name": settings.store_name,
+        "qr_print_pixels": QR_PRINT_PIXELS,
     }
 
 
@@ -202,4 +254,6 @@ def label_print_payload(batch: ProductBatch, copies: int | None = None, app_sett
         "expiry_date": batch.expiry_date.isoformat(),
         "selling_price": str(batch.tp_price),
         "identifier": batch.barcode or f"BATCH-{batch.id}",
+        "qr_payload": build_label_qr_payload(batch),
+        "qr_print_pixels": QR_PRINT_PIXELS,
     }
