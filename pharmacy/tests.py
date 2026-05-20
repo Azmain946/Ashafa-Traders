@@ -124,9 +124,11 @@ class PharmacyWorkflowTests(TestCase):
         from pharmacy.printing import build_label_qr_payload, parse_label_qr_payload
 
         payload = build_label_qr_payload(self.batch)
-        self.assertLess(len(payload), 120)
+        self.assertEqual(len(payload), 13)
+        self.assertTrue(payload.isdigit())
+        self.assertEqual(int(payload), self.product.pk)
         parsed = parse_label_qr_payload(payload)
-        self.assertEqual(parsed["identifier"], self.batch.barcode)
+        self.assertEqual(parsed["product_id"], str(self.product.pk))
 
         preview = self.client.get(reverse("api_batch_qr_png", args=[self.batch.pk]), {"preview": "1"})
         self.assertEqual(preview.status_code, 200)

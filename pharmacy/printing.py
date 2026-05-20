@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from decimal import Decimal
 from io import BytesIO
 
@@ -15,6 +14,7 @@ from .models import AppSetting, ProductBatch, SalesInvoice
 DEFAULT_LINE_CHARS = 46
 QR_PREVIEW_PIXELS = 50
 QR_PRINT_PIXELS = 256
+PRODUCT_QR_DIGITS = 13
 
 
 def money_label(value) -> str:
@@ -144,38 +144,21 @@ def build_sample_receipt_escpos(app_settings: AppSetting | None = None) -> str:
     )
 
 
+def product_qr_code(product) -> str:
+    """13-digit zero-padded product ID for label QR codes."""
+    return f"{product.pk:0{PRODUCT_QR_DIGITS}d}"
+
+
 def build_label_qr_payload(batch: ProductBatch) -> str:
-    """
-  Compact QR payload for reliable thermal scanning.
-  Format: {identifier}|P{product_id}|{batch}|{expiry_yymmdd}|{tp_price}|{short_name}
-  """
-    product = batch.product
-    identifier = batch.barcode or f"B{batch.id}"
-    name = re.sub(r"[|\r\n]+", " ", (product.name or "Medicine"))[:20].strip()
-    price = Decimal(batch.tp_price).quantize(Decimal("0.01"))
-    batch_no = re.sub(r"[|\r\n]+", " ", batch.batch_number or "-")[:24]
-    return f"{identifier}|P{product.id}|{batch_no}|{batch.expiry_date:%y%m%d}|{price}|{name}"
+    return product_qr_code(batch.product)
 
 
 def parse_label_qr_payload(payload: str) -> dict | None:
-    """Parse a label QR string back into structured fields."""
+    """Parse a label QR string (13-digit product id) back into fields."""
     text = (payload or "").strip()
-    if not text:
+    if not text.isdigit():
         return None
-    parts = text.split("|")
-    if len(parts) < 4:
-        return {"identifier": text}
-    result = {
-        "identifier": parts[0],
-        "product_id": parts[1][1:] if parts[1].startswith("P") else parts[1],
-        "batch_number": parts[2],
-        "expiry_yymmdd": parts[3],
-    }
-    if len(parts) > 4:
-        result["selling_price"] = parts[4]
-    if len(parts) > 5:
-        result["product_name"] = parts[5]
-    return result
+    return {"product_id": str(int(text))}
 
 
 def generate_qr_png(batch: ProductBatch, pixel_size: int | None = None, *, for_print: bool = True) -> bytes:
@@ -253,7 +236,7 @@ def label_print_payload(batch: ProductBatch, copies: int | None = None, app_sett
         "batch_number": batch.batch_number,
         "expiry_date": batch.expiry_date.isoformat(),
         "selling_price": str(batch.tp_price),
-        "identifier": batch.barcode or f"BATCH-{batch.id}",
+        "identifier": product_qr_code(batch.product),
         "qr_payload": build_label_qr_payload(batch),
         "qr_print_pixels": QR_PRINT_PIXELS,
     }
