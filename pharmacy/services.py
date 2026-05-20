@@ -32,8 +32,15 @@ from .models import (
 MONEY = Decimal("0.01")
 UNIT_MONEY = Decimal("0.00000001")
 
+DASHBOARD_RANGE_KEYS = ("today", "this_week", "this_month", "this_year")
+
 # Padded stock entry (ProductBatch.pk) length used in QR labels and search
 STOCK_ENTRY_NUMBER_MAX_LEN = 13
+
+
+def invalidate_dashboard_cache():
+    for range_key in DASHBOARD_RANGE_KEYS:
+        cache.delete(f"dashboard_metrics:{range_key}")
 
 
 def stock_entry_pk_from_query(term):
@@ -56,10 +63,85 @@ def rounded_total(value):
     return Decimal(value or 0).to_integral_value(rounding=ROUND_FLOOR).quantize(MONEY)
 
 
+def checkout_totals(subtotal, discount_percent=0, discount_amount=0):
+    """Order-level discount then floor to whole taka (matches finalize_checkout)."""
+    subtotal = money(subtotal)
+    discount_percent = money(discount_percent)
+    fixed_discount = money(discount_amount)
+    percentage_discount = money(subtotal * discount_percent / Decimal("100.00"))
+    total_discount = min(subtotal, percentage_discount + fixed_discount)
+    unrounded_total = money(subtotal - total_discount)
+    grand_total = rounded_total(unrounded_total)
+    round_off_amount = money(unrounded_total - grand_total)
+    return {
+        "subtotal": subtotal,
+        "discount_percent": discount_percent,
+        "total_discount": money(total_discount),
+        "unrounded_total": unrounded_total,
+        "grand_total": grand_total,
+        "round_off_amount": round_off_amount,
+    }
+
+
+def proportional_order_discount(line_total, invoice_subtotal, order_discount_amount):
+    if invoice_subtotal <= 0 or order_discount_amount <= 0:
+        return Decimal("0.00")
+    return money(order_discount_amount * line_total / invoice_subtotal)
+
+
+def refund_amount_for_returned_units(item, return_qty, invoice_subtotal, order_discount_amount):
+    """Refund at effective per-unit price after order-level discount allocation."""
+    if return_qty <= 0:
+        return Decimal("0.00")
+    line_discount_share = proportional_order_discount(item.line_total, invoice_subtotal, order_discount_amount)
+    effective_line = money(item.line_total - line_discount_share)
+    return money(effective_line / item.quantity * return_qty)
+
+
+def remaining_sale_totals(remaining_lines, original_subtotal, order_discount_amount):
+    """
+    remaining_lines: list of dicts with line_total, buy_price, quantity.
+    Returns subtotal, discount_amount, round_off, grand_total, profit_amount.
+    """
+    subtotal = money(sum(row["line_total"] for row in remaining_lines))
+    if original_subtotal > 0 and order_discount_amount > 0:
+        discount_amount = money(order_discount_amount * subtotal / original_subtotal)
+    else:
+        discount_amount = Decimal("0.00")
+    unrounded_total = money(max(subtotal - discount_amount, Decimal("0.00")))
+    grand_total = rounded_total(unrounded_total)
+    round_off_amount = money(unrounded_total - grand_total)
+    profit = Decimal("0.00")
+    for row in remaining_lines:
+        profit += money(row["line_total"] - row["buy_price"] * row["quantity"])
+    profit_amount = money(profit - discount_amount)
+    return subtotal, discount_amount, round_off_amount, grand_total, profit_amount
+
+
+def payment_status_for_amounts(grand_total, paid_amount):
+    paid_amount = money(paid_amount)
+    grand_total = money(grand_total)
+    due_amount = money(max(grand_total - paid_amount, Decimal("0.00")))
+    if due_amount == 0:
+        status = SalesInvoice.PAYMENT_PAID
+    elif paid_amount == 0:
+        status = SalesInvoice.PAYMENT_UNPAID
+    else:
+        status = SalesInvoice.PAYMENT_PARTIAL
+    return paid_amount, due_amount, status
+
+
 def generate_invoice_number(order=None):
     if order is not None:
-        next_number = order.invoices.count() + 1
-        return f"{order.order_number}{next_number}"
+        with transaction.atomic():
+            locked_order = Order.objects.select_for_update().get(pk=order.pk)
+            prefix = locked_order.order_number
+            max_suffix = 0
+            for inv in locked_order.invoices.only("invoice_number"):
+                suffix = inv.invoice_number[len(prefix) :]
+                if suffix.isdigit():
+                    max_suffix = max(max_suffix, int(suffix))
+            return f"{prefix}{max_suffix + 1}"
     today = timezone.localdate()
     with transaction.atomic():
         sequence, _ = InvoiceSequence.objects.select_for_update().get_or_create(date=today)
@@ -93,12 +175,13 @@ def current_cart(session):
     return session.setdefault("cart", {})
 
 
-def cart_summary(session):
+def cart_summary(session, discount_percent=0, discount_amount=0):
     cart = current_cart(session)
+    today = timezone.localdate()
     batch_ids = [int(batch_id) for batch_id in cart.keys()]
     batches = {
         batch.id: batch
-        for batch in ProductBatch.objects.filter(id__in=batch_ids)
+        for batch in ProductBatch.objects.filter(id__in=batch_ids, is_active=True)
         .select_related("product")
         .only(
             "id",
@@ -107,6 +190,7 @@ def cart_summary(session):
             "stock_quantity",
             "tp_price",
             "mrp",
+            "is_active",
             "product__id",
             "product__name",
             "product__generic_name",
@@ -118,7 +202,7 @@ def cart_summary(session):
     subtotal = Decimal("0.00")
     for batch_id, raw in cart.items():
         batch = batches.get(int(batch_id))
-        if not batch:
+        if not batch or batch.expiry_date <= today:
             continue
         quantity = int(raw.get("quantity", 1))
         unit_price = unit_money(raw.get("unit_price", batch.tp_price))
@@ -142,12 +226,14 @@ def cart_summary(session):
                 "line_total": line_total,
             }
         )
-    rounded = rounded_total(subtotal)
+    totals = checkout_totals(subtotal, discount_percent, discount_amount)
     return {
         "items": items,
-        "subtotal": money(subtotal),
-        "round_off_amount": money(subtotal - rounded),
-        "rounded_total": rounded,
+        "subtotal": totals["subtotal"],
+        "discount_amount": totals["total_discount"],
+        "round_off_amount": totals["round_off_amount"],
+        "rounded_total": totals["grand_total"],
+        "unrounded_total": totals["unrounded_total"],
         "count": sum(item["quantity"] for item in items),
     }
 
@@ -208,8 +294,11 @@ def _resolve_customer(name, phone):
     phone = (phone or "").strip()
     if not phone:
         return None
-    customer, _ = Customer.objects.get_or_create(phone=phone, defaults={"name": name or "Walk-in Customer"})
-    if name and customer.name != name:
+    customer, created = Customer.objects.get_or_create(
+        phone=phone,
+        defaults={"name": name or "Walk-in Customer"},
+    )
+    if name and (created or not customer.name.strip() or customer.name == "Walk-in Customer"):
         customer.name = name
         customer.save(update_fields=["name", "updated_at"])
     return customer
@@ -217,9 +306,16 @@ def _resolve_customer(name, phone):
 
 @transaction.atomic
 def finalize_checkout(session, checkout_data, user=None):
-    summary = cart_summary(session)
+    discount_percent = money(checkout_data.get("discount_percent"))
+    fixed_discount = money(checkout_data.get("discount_amount"))
+    summary = cart_summary(session, discount_percent, fixed_discount)
+    cart = current_cart(session)
     if not summary["items"]:
+        if cart:
+            raise ValidationError("Cart items are invalid, expired, or unavailable. Remove them and try again.")
         raise ValidationError("Cart is empty.")
+    if len(cart) > len(summary["items"]):
+        raise ValidationError("Some cart items are invalid, expired, or unavailable. Refresh the cart.")
 
     locked_batches = {
         batch.id: batch
@@ -242,21 +338,12 @@ def finalize_checkout(session, checkout_data, user=None):
         profit += money(line_total - locked_batch.buy_price * item["quantity"])
         prepared_items.append((locked_batch, item, line_total))
 
-    discount_percent = money(checkout_data.get("discount_percent"))
-    fixed_discount = money(checkout_data.get("discount_amount"))
-    percentage_discount = money(subtotal * discount_percent / Decimal("100.00"))
-    total_discount = min(subtotal, percentage_discount + fixed_discount)
-    unrounded_total = money(subtotal - total_discount)
-    grand_total = rounded_total(unrounded_total)
-    round_off_amount = money(unrounded_total - grand_total)
+    totals = checkout_totals(subtotal, discount_percent, fixed_discount)
+    total_discount = totals["total_discount"]
+    grand_total = totals["grand_total"]
+    round_off_amount = totals["round_off_amount"]
     paid_amount = min(money(checkout_data.get("paid_amount")), grand_total)
-    due_amount = money(grand_total - paid_amount)
-    if due_amount == 0:
-        payment_status = SalesInvoice.PAYMENT_PAID
-    elif paid_amount == 0:
-        payment_status = SalesInvoice.PAYMENT_UNPAID
-    else:
-        payment_status = SalesInvoice.PAYMENT_PARTIAL
+    paid_amount, due_amount, payment_status = payment_status_for_amounts(grand_total, paid_amount)
 
     customer = _resolve_customer(checkout_data.get("customer_name"), checkout_data.get("customer_phone"))
     order_number = session.pop("pending_order_number", None)
@@ -334,13 +421,23 @@ def finalize_checkout(session, checkout_data, user=None):
                 price=line_total,
             )
     clear_cart(session)
-    cache.delete("dashboard_metrics")
+    invalidate_dashboard_cache()
     return invoice
 
 
 @transaction.atomic
 def create_order_update_invoice(order, user=None):
     order = Order.objects.select_for_update().select_related("customer").get(pk=order.pk)
+    source_invoice = (
+        SalesInvoice.objects.filter(order=order)
+        .annotate(item_count=Count("items"))
+        .filter(item_count__gt=0)
+        .order_by("-created_at")
+        .prefetch_related("items")
+        .first()
+    )
+    discount_percent = source_invoice.discount_percent if source_invoice else Decimal("0.00")
+    profit_amount = source_invoice.profit_amount if source_invoice else Decimal("0.00")
     invoice = SalesInvoice.objects.create(
         order=order,
         invoice_number=generate_invoice_number(order),
@@ -348,16 +445,34 @@ def create_order_update_invoice(order, user=None):
         customer_name=order.customer_name,
         customer_phone=order.customer_phone,
         subtotal=order.subtotal,
+        discount_percent=discount_percent,
         discount_amount=order.discount_amount,
         round_off_amount=order.round_off_amount,
         grand_total=order.grand_total,
         paid_amount=order.paid_amount,
         due_amount=order.due_amount,
+        profit_amount=profit_amount,
         payment_status=order.payment_status,
         notes=order.notes,
         created_by=user if getattr(user, "is_authenticated", False) else None,
     )
-    cache.delete("dashboard_metrics")
+    if source_invoice:
+        for item in source_invoice.items.all():
+            SalesInvoiceItem.objects.create(
+                invoice=invoice,
+                product=item.product,
+                product_batch=item.product_batch,
+                product_name=item.product_name,
+                batch_number=item.batch_number,
+                quantity=item.quantity,
+                unit_price=item.unit_price,
+                discount_percent=item.discount_percent,
+                discount_amount=item.discount_amount,
+                line_total=item.line_total,
+                buy_price=item.buy_price,
+                returned_quantity=item.returned_quantity,
+            )
+    invalidate_dashboard_cache()
     return invoice
 
 
@@ -387,7 +502,7 @@ def adjust_stock(batch, action, quantity, note="", user=None):
         note=note,
         created_by=user if getattr(user, "is_authenticated", False) else None,
     )
-    cache.delete("dashboard_metrics")
+    invalidate_dashboard_cache()
     return locked_batch
 
 
@@ -415,7 +530,11 @@ def lookup_return_invoice(invoice_number=None, phone=None, invoice_date=None):
                     return hit
         order = Order.objects.filter(order_number__iexact=lookup_value).first()
         if order:
-            invoice = base_qs.filter(Q(order=order) | Q(invoice_number__startswith=order.order_number)).first()
+            invoice = (
+                base_qs.filter(Q(order=order) | Q(invoice_number__startswith=order.order_number))
+                .order_by("created_at")
+                .first()
+            )
             if invoice and invoice.order_id is None:
                 invoice.order = order
                 invoice.save(update_fields=["order", "updated_at"])
@@ -461,7 +580,7 @@ def resolve_return_invoice(invoice):
             .prefetch_related("items__product", "items__product_batch")
             .annotate(item_count=Count("items"))
             .filter(Q(order=invoice.order) | Q(invoice_number__startswith=invoice.order.order_number), item_count__gt=0)
-            .order_by("-created_at")
+            .order_by("created_at")
             .first()
         )
         if resolved and resolved.order_id is None:
@@ -471,10 +590,36 @@ def resolve_return_invoice(invoice):
     return invoice
 
 
+def _invoice_with_returnable_lines(invoice):
+    """Prefer the earliest sale invoice for an order when the given row has no returnable qty."""
+    if not invoice:
+        return None
+    if invoice.items.filter(returned_quantity__lt=F("quantity")).exists():
+        return invoice
+    if not invoice.order_id:
+        return invoice
+    return (
+        SalesInvoice.objects.filter(order=invoice.order)
+        .annotate(item_count=Count("items"))
+        .filter(item_count__gt=0)
+        .order_by("created_at")
+        .prefetch_related("items__product", "items__product_batch")
+        .first()
+    )
+
+
 @transaction.atomic
 def process_return(invoice, quantities, refund_method=ReturnTransaction.REFUND_ADJUST_DUE, user=None, notes=""):
     if not invoice:
         raise ValidationError("Invoice is required.")
+    invoice = SalesInvoice.objects.select_for_update().select_related("order").get(pk=invoice.pk)
+    invoice = _invoice_with_returnable_lines(invoice)
+    if not invoice:
+        raise ValidationError("Invoice is required.")
+    invoice = SalesInvoice.objects.select_for_update().select_related("order").get(pk=invoice.pk)
+    original_subtotal = money(invoice.subtotal)
+    order_discount_amount = money(invoice.discount_amount)
+
     locked_items = list(
         SalesInvoiceItem.objects.select_for_update()
         .filter(invoice=invoice)
@@ -488,19 +633,19 @@ def process_return(invoice, quantities, refund_method=ReturnTransaction.REFUND_A
             continue
         if qty > item.returnable_quantity:
             raise ValidationError(f"Cannot return more than sold for {item.product_name}.")
-        per_unit_refund = money(item.line_total / item.quantity)
-        refund_amount = money(per_unit_refund * qty)
+        refund_amount = refund_amount_for_returned_units(item, qty, original_subtotal, order_discount_amount)
         total_refund += refund_amount
         return_items.append((item, qty, refund_amount))
     if not return_items:
         raise ValidationError("Choose at least one item to return.")
+    total_refund = money(total_refund)
 
     transaction_obj = ReturnTransaction.objects.create(
         invoice=invoice,
         customer=invoice.customer,
         phone=invoice.customer_phone,
         refund_method=refund_method,
-        total_refund=money(total_refund),
+        total_refund=total_refund,
         notes=notes,
         created_by=user if getattr(user, "is_authenticated", False) else None,
     )
@@ -530,48 +675,67 @@ def process_return(invoice, quantities, refund_method=ReturnTransaction.REFUND_A
             note=f"Return for {invoice.invoice_number}",
             created_by=user if getattr(user, "is_authenticated", False) else None,
         )
+        if item.product.is_antibiotic:
+            entry = AntibioticRegisterEntry.objects.filter(invoice=invoice, product=item.product).order_by("-id").first()
+            if entry:
+                entry.quantity = max(0, entry.quantity - qty)
+                if entry.quantity <= 0:
+                    entry.delete()
+                else:
+                    unit_effective = refund_amount_for_returned_units(
+                        item, 1, original_subtotal, order_discount_amount
+                    )
+                    entry.price = money(unit_effective * entry.quantity)
+                    entry.save(update_fields=["quantity", "price", "updated_at"])
 
     invoice.refresh_from_db()
-    remaining_items = list(invoice.items.select_related("product", "product_batch").all())
-    subtotal = Decimal("0.00")
-    profit = Decimal("0.00")
+    remaining_rows = []
     prepared_remaining = []
-    for item in remaining_items:
+    for item in invoice.items.select_related("product", "product_batch").all():
         remaining_qty = item.returnable_quantity
         if remaining_qty <= 0:
             continue
         unit_line_total = money(item.line_total / item.quantity)
         line_total = money(unit_line_total * remaining_qty)
-        discount_amount = money((item.discount_amount / item.quantity) * remaining_qty) if item.discount_amount else Decimal("0.00")
-        subtotal += line_total
-        profit += money((item.unit_price - item.buy_price) * remaining_qty - discount_amount)
-        prepared_remaining.append((item, remaining_qty, line_total, discount_amount))
+        line_discount = money((item.discount_amount / item.quantity) * remaining_qty) if item.discount_amount else Decimal("0.00")
+        remaining_rows.append(
+            {"line_total": line_total, "buy_price": item.buy_price, "quantity": remaining_qty}
+        )
+        prepared_remaining.append((item, remaining_qty, line_total, line_discount))
 
-    grand_total = rounded_total(subtotal)
-    round_off_amount = money(subtotal - grand_total)
-    order = invoice.order
-    paid_amount = money(getattr(order, "paid_amount", invoice.paid_amount))
-    if refund_method == ReturnTransaction.REFUND_CASH:
-        paid_amount = money(max(paid_amount - total_refund, Decimal("0.00")))
-    due_amount = money(max(grand_total - paid_amount, Decimal("0.00")))
-    payment_status = (
-        SalesInvoice.PAYMENT_PAID
-        if due_amount == 0
-        else SalesInvoice.PAYMENT_PARTIAL
-        if paid_amount
-        else SalesInvoice.PAYMENT_UNPAID
+    subtotal, discount_rem, round_off_amount, grand_total, profit_amount = remaining_sale_totals(
+        remaining_rows, original_subtotal, order_discount_amount
     )
 
+    order = invoice.order
     if order:
-        order.subtotal = money(subtotal)
-        order.discount_amount = Decimal("0.00")
+        order = Order.objects.select_for_update().get(pk=order.pk)
+    base_paid = money(order.paid_amount if order else invoice.paid_amount)
+    paid_amount = money(max(base_paid - total_refund, Decimal("0.00")))
+    paid_amount, due_amount, payment_status = payment_status_for_amounts(grand_total, paid_amount)
+
+    if order:
+        order.subtotal = subtotal
+        order.discount_amount = discount_rem
         order.round_off_amount = round_off_amount
         order.grand_total = grand_total
         order.paid_amount = paid_amount
         order.due_amount = due_amount
         order.payment_status = payment_status
         order.notes = notes or order.notes
-        order.save(update_fields=["subtotal", "discount_amount", "round_off_amount", "grand_total", "paid_amount", "due_amount", "payment_status", "notes", "updated_at"])
+        order.save(
+            update_fields=[
+                "subtotal",
+                "discount_amount",
+                "round_off_amount",
+                "grand_total",
+                "paid_amount",
+                "due_amount",
+                "payment_status",
+                "notes",
+                "updated_at",
+            ]
+        )
 
     new_invoice = SalesInvoice.objects.create(
         order=order,
@@ -579,18 +743,19 @@ def process_return(invoice, quantities, refund_method=ReturnTransaction.REFUND_A
         customer=invoice.customer,
         customer_name=invoice.customer_name,
         customer_phone=invoice.customer_phone,
-        subtotal=money(subtotal),
-        discount_amount=Decimal("0.00"),
+        subtotal=subtotal,
+        discount_percent=invoice.discount_percent,
+        discount_amount=discount_rem,
         round_off_amount=round_off_amount,
         grand_total=grand_total,
         paid_amount=paid_amount,
         due_amount=due_amount,
-        profit_amount=money(profit),
+        profit_amount=profit_amount,
         payment_status=payment_status,
         notes=notes or f"Return adjustment for {invoice.invoice_number}",
         created_by=user if getattr(user, "is_authenticated", False) else None,
     )
-    for source_item, remaining_qty, line_total, discount_amount in prepared_remaining:
+    for source_item, remaining_qty, line_total, line_discount in prepared_remaining:
         SalesInvoiceItem.objects.create(
             invoice=new_invoice,
             product=source_item.product,
@@ -600,17 +765,12 @@ def process_return(invoice, quantities, refund_method=ReturnTransaction.REFUND_A
             quantity=remaining_qty,
             unit_price=source_item.unit_price,
             discount_percent=source_item.discount_percent,
-            discount_amount=discount_amount,
+            discount_amount=line_discount,
             line_total=line_total,
             buy_price=source_item.buy_price,
         )
 
-    invoice.grand_total = grand_total
-    invoice.round_off_amount = round_off_amount
-    invoice.due_amount = due_amount
-    invoice.payment_status = payment_status
-    invoice.save(update_fields=["grand_total", "round_off_amount", "due_amount", "payment_status", "updated_at"])
-    cache.delete("dashboard_metrics")
+    invalidate_dashboard_cache()
     return transaction_obj, new_invoice
 
 
@@ -725,7 +885,7 @@ def delete_order_completely(order):
         ReturnTransaction.objects.filter(invoice=inv).delete()
         inv.delete()
     order.delete()
-    cache.delete("dashboard_metrics")
+    invalidate_dashboard_cache()
 
 
 @transaction.atomic
@@ -734,7 +894,7 @@ def delete_customer_completely(customer):
     for ord_ in list(customer.orders.all()):
         delete_order_completely(ord_)
     customer.delete()
-    cache.delete("dashboard_metrics")
+    invalidate_dashboard_cache()
 
 
 @transaction.atomic
@@ -744,7 +904,7 @@ def delete_product_completely(product):
         raise ValidationError("Cannot delete this product: it appears on sales invoices.")
     AntibioticRegisterEntry.objects.filter(product=product).delete()
     product.delete()
-    cache.delete("dashboard_metrics")
+    invalidate_dashboard_cache()
 
 
 def search_products(term, limit=8):

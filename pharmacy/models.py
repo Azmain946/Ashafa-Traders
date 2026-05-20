@@ -7,8 +7,8 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
-from django.db import models
-from django.db.models import Sum
+from django.db import models, transaction
+from django.db.models import F, Sum
 from django.utils import timezone
 from PIL import Image
 
@@ -275,7 +275,13 @@ class Customer(TimeStampedModel):
 
     def save(self, *args, **kwargs):
         if not self.customer_code:
-            self.customer_code = f"{timezone.now():%Y%m%d}{Customer.objects.count() + 1:02d}"
+            today = timezone.localdate()
+            with transaction.atomic():
+                sequence, _ = CustomerSequence.objects.select_for_update().get_or_create(date=today)
+                sequence.last_number = F("last_number") + 1
+                sequence.save(update_fields=["last_number"])
+                sequence.refresh_from_db(fields=["last_number"])
+                self.customer_code = f"{today:%Y%m%d}{sequence.last_number:02d}"
         super().save(*args, **kwargs)
 
     @property
@@ -357,6 +363,17 @@ class InvoiceSequence(models.Model):
 
 
 class OrderSequence(models.Model):
+    date = models.DateField(unique=True)
+    last_number = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["-date"]
+
+    def __str__(self):
+        return f"{self.date}: {self.last_number}"
+
+
+class CustomerSequence(models.Model):
     date = models.DateField(unique=True)
     last_number = models.PositiveIntegerField(default=0)
 

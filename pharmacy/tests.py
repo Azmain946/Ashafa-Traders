@@ -274,6 +274,35 @@ class PharmacyWorkflowTests(TestCase):
         self.assertEqual(new_invoice.items.first().quantity, 4)
         self.batch.refresh_from_db()
         self.assertEqual(self.batch.stock_quantity, 6)
+        invoice.order.refresh_from_db()
+        self.assertEqual(invoice.order.paid_amount, Decimal("56.00"))
+        self.assertEqual(invoice.order.grand_total, Decimal("56.00"))
+        self.assertEqual(invoice.order.due_amount, Decimal("0.00"))
+
+    def test_return_refund_honors_order_level_discount(self):
+        session = SessionLike()
+        session["pending_order_number"] = "2099010212"
+        add_or_update_cart_item(session, self.batch.id, quantity=10)
+        invoice = finalize_checkout(
+            session,
+            {
+                "customer_name": "Discount Return",
+                "customer_phone": "01710000012",
+                "discount_percent": Decimal("10.00"),
+                "discount_amount": Decimal("0.00"),
+                "paid_amount": Decimal("200.00"),
+                "notes": "",
+            },
+            self.user,
+        )
+        self.assertEqual(invoice.subtotal, Decimal("140.00"))
+        self.assertEqual(invoice.discount_amount, Decimal("14.00"))
+        self.assertEqual(invoice.grand_total, Decimal("126.00"))
+        item = invoice.items.first()
+        return_tx, _ = process_return(invoice, {str(item.id): "1"}, user=self.user)
+        self.assertEqual(return_tx.total_refund, Decimal("12.60"))
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.grand_total, Decimal("126.00"))
 
     def test_delete_order_removes_invoices(self):
         session = SessionLike()

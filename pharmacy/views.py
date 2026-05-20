@@ -40,6 +40,7 @@ from .models import (
     AppSetting,
     Customer,
     Order,
+    ReturnTransaction,
     Product,
     ProductBatch,
     ProductBrand,
@@ -139,7 +140,7 @@ def home(request):
         featured_products = []
     recent_invoices = Order.objects.only(
         "order_number", "customer_name", "grand_total", "created_at", "payment_status"
-    )[:6]
+    ).order_by("-created_at")[:6]
     return render(
         request,
         "pharmacy/home.html",
@@ -455,6 +456,7 @@ def supplier_detail(request, pk):
         receipt_form = SupplierReceiptForm(request.POST)
         if receipt_form.is_valid():
             receipt = receipt_form.save(commit=False)
+            receipt.supplier = supplier
             receipt.uploaded_by = request.user
             receipt.save()
             messages.success(request, "Supplier memo saved.")
@@ -541,11 +543,15 @@ def returns(request):
                 no_return_items_message = "No returnable product lines were found for this order."
     if request.method == "POST":
         invoice = resolve_return_invoice(get_object_or_404(SalesInvoice, pk=request.POST.get("invoice_id")))
+        refund_method = request.POST.get("refund_method", ReturnTransaction.REFUND_ADJUST_DUE)
+        if refund_method not in dict(ReturnTransaction.REFUND_CHOICES):
+            messages.error(request, "Invalid refund method.")
+            return redirect("returns")
         try:
             return_tx, new_invoice = process_return(
                 invoice,
                 request.POST,
-                request.POST.get("refund_method", "adjust_due"),
+                refund_method,
                 request.user,
                 request.POST.get("notes", ""),
             )
@@ -837,8 +843,10 @@ def cart_payload(summary):
     return {
         "items": items,
         "subtotal": str(summary["subtotal"]),
+        "discount_amount": str(summary.get("discount_amount", "0.00")),
         "round_off_amount": str(summary["round_off_amount"]),
         "rounded_total": str(summary["rounded_total"]),
+        "unrounded_total": str(summary.get("unrounded_total", summary["rounded_total"])),
         "count": summary["count"],
     }
 
@@ -976,7 +984,10 @@ def api_batch_qr_png(request, pk):
 def api_batch_label(request, pk):
     batch = get_object_or_404(ProductBatch.objects.select_related("product"), pk=pk)
     copies = request.GET.get("copies")
-    copies_value = int(copies) if copies else None
+    try:
+        copies_value = int(copies) if copies else None
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "Invalid copies value."}, status=400)
     app_settings = AppSetting.load()
     payload = label_print_payload(batch, copies=copies_value, app_settings=app_settings)
     payload["image_url"] = request.build_absolute_uri(
@@ -991,7 +1002,10 @@ def api_print_test_label(request):
     batch = ProductBatch.objects.select_related("product").filter(is_active=True).order_by("-created_at").first()
     if not batch:
         return JsonResponse({"error": "No batch available for label test."}, status=404)
-    copies = max(1, int(request.GET.get("copies", 1)))
+    try:
+        copies = max(1, int(request.GET.get("copies", 1)))
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "Invalid copies value."}, status=400)
     app_settings = AppSetting.load()
     payload = label_print_payload(batch, copies=copies, app_settings=app_settings)
     payload["image_url"] = request.build_absolute_uri(
